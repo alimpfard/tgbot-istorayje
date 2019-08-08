@@ -16,6 +16,7 @@ import re, os
 from io import BytesIO
 from uuid import uuid4, UUID
 import traceback
+import json
 
 def get_any(obj, lst):
     for prop in lst:
@@ -313,7 +314,7 @@ class IstorayjeBot:
             update.message.reply_text(s)
         else:
             update.message.reply_text('You should get a json file now...')
-            update.message.reply_document(document=BytesIO(bytes(s, 'utf8')), filename="collection.json")
+            update.message.reply_document(document=BytesIO(bytes(json.dumps(s), 'utf8')), filename="collection.json")
 
     reg = re.compile(r'\s+')
 
