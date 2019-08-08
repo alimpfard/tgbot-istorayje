@@ -12,6 +12,7 @@ from telegram import (
 from db import DB
 from uuid import uuid4
 import re, os
+from io import StringIO
 
 
 class IstorayjeBot:
@@ -193,9 +194,13 @@ class IstorayjeBot:
         coll = self.db.db.storage.find_one(filter={
             'user_id': update.message.from_user.id
         })
-        update.message.reply_text(
-            str(coll['collection'])
-        )
+        s = str(coll['collection'])
+        if len(s) < 4096:
+            update.message.reply_text(s)
+        else:
+            update.message.reply_text('You should get a json file now...')
+            update.message.reply_document(StringIO(s), filename="collection.json")
+        
     reg = re.compile(r'\s+')
 
     def parse_query(self, query):
