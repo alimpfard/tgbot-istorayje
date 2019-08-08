@@ -153,7 +153,7 @@ class IstorayjeBot:
                     }
                     updateop = {
                         '$push': {
-                            f'collection.{coll}.$.tags': tags
+                            f'collection.{coll}.index.$.tags': tags
                         }
                         for coll in collections
                     }
@@ -164,7 +164,7 @@ class IstorayjeBot:
                     }
                     updateop = {
                         '$pullAll': {
-                            f'collection.{coll}.$.tags': tags
+                            f'collection.{coll}.index.$.tags': tags
                         }
                         for coll in collections
                     }
@@ -175,7 +175,7 @@ class IstorayjeBot:
                     }
                     updateop = {
                         '$set': {
-                            f'collection.{coll}.$.tags': tags
+                            f'collection.{coll}.index.$.tags': tags
                         }
                         for coll in collections
                     }
