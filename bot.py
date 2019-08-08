@@ -9,11 +9,13 @@ from telegram import (
     InlineQueryResultCachedDocument, InlineQueryResultCachedPhoto, InlineQueryResultCachedGif,
     InlineQueryResultCachedMpeg4Gif, InlineQueryResultCachedSticker
 )
+from telegram.ext import ChosenInlineResultHandler
+
 from db import DB
-from uuid import uuid4
 import re, os
 from io import BytesIO
-
+from uuid import uuid4, UUID
+import traceback
 
 class IstorayjeBot:
     def __init__(self, token, db: DB):
@@ -50,6 +52,7 @@ class IstorayjeBot:
             CommandHandler('temp', self.set_temp),
             CommandHandler('set', self.set_option),
             CommandHandler('help', self.help),
+            ChosenInlineResultHandler(self.on_result_chosen),
             InlineQueryHandler(self.handle_query,
                                pass_user_data=True, pass_chat_data=True),
             MessageHandler(Filters.all, self.handle_possible_index_update)
@@ -60,6 +63,32 @@ class IstorayjeBot:
             f'''Hello there General Kenobi - {update.message.from_user.id}@{update.message.chat.id}\nWe are live at {bot}'''
         )
 
+
+    def on_result_chosen(self, bot, update):
+        result = update.chosen_inline_result
+        result_id = result.result_id
+        try:
+            UUID(result_id, version=4)
+            return # we don't want to cache these fuckers
+        except:
+            pass
+
+        user = result.from_user.id
+        coll, *_ = self.parse_query(result.query)
+        print(f'> chosen result {result_id} for user {user} - collection {coll}')
+        doc = self.db.db.storage.find_one_and_update({
+            'user_id': user
+        }, {
+            '$addToSet': {
+                f'last_used.{coll}': int(result_id)
+            }
+        }, return_document=True)
+        if len(doc['last_used'][coll]) > 5:
+            self.db.db.storage.update_one({
+                'user_id': user
+            }, {
+                '$pop': {f'last_used.{coll}': 1}
+            })
 
     def handle_possible_index_update(self, bot, update):
         print('<<<', update)
@@ -210,42 +239,43 @@ class IstorayjeBot:
     def parse_query(self, query):
         coll, *queries = re.split(self.reg, query)
         return (coll, queries)
+
     def clone_messaage_with_data(self, data, tags):
         ty = data['type']
         if ty == 'text':
             return InlineQueryResultArticle(
-                id=uuid4(),
-                title='> ' + ', '.join(tags) + ' (' + str(data.msg_id) + ')',
+                id=data.msg_id,
+                title='> ' + ', '.join(tags) + ' (' + str(data['msg_id']) + ')',
                 input_message_content=InputTextMessageContent(
                     data['text']
                 )
             )
         elif ty == 'mp4':
             return InlineQueryResultCachedMpeg4Gif(
-                uuid4(),
+                data['msg_id'],
                 data['file_id']
             )
         elif ty == 'gif':
             return InlineQueryResultCachedGif(
-                uuid4(),
+                data['msg_id'],
                 data['file_id']
             )
         elif ty == 'img':
             return InlineQueryResultCachedPhoto(
-                uuid4(),
+                data['msg_id'],
                 data['file_id'],
-                title='> ' + ', '.join(tags) + ' (' + str(data.msg_id) + ')',
+                title='> ' + ', '.join(tags) + ' (' + str(data['msg_id']) + ')',
                 caption=data.get('caption', None)
             )
         elif ty == 'sticker':
             return InlineQueryResultCachedSticker(
-                uuid4(),
+                data['msg_id'],
                 data['file_id']
             )
         elif ty == 'doc':
             return InlineQueryResultCachedDocument(
-                uuid4(),
-                '> ' + ', '.join(tags) + ' (' + str(data.message_id) + ')',
+                data['msg_id'],
+                '> ' + ', '.join(tags) + ' (' + str(data['msg_id']) + ')',
                 data['file_id']
             )
         else:
@@ -304,6 +334,9 @@ class IstorayjeBot:
     def handle_query(self, bot, update, user_data=None, chat_data=None):
         try:
             coll, query = self.parse_query(update.inline_query.query)
+            if not coll or coll == '':
+                return
+
             print(coll, query)
             colls = list((x['index']['id'], x['index']['tags']) for x in
                 self.db.db.storage.aggregate([
@@ -326,6 +359,34 @@ class IstorayjeBot:
                 {'$limit': 5}
             ]))
             results = []
+            userdata = self.db.db.storage.find_one({'user_id': update.inline_query.from_user.id})
+            chatid = userdata['collection'][coll]['id']
+            cachetime = 300
+            if len(query) == 0:
+                last_used = self.db.db.storage.find_one({
+                    'user_id': update.inline_query.from_user.id
+                }, projection={
+                    '_id': 0,
+                    'collection': 0,
+                })['last_used']
+                print('>>>', last_used)
+                last_used = last_used[coll]
+                print('>>> || ', last_used, 'in', chatid)
+                for msgid in last_used:
+                    msgid = int(msgid)
+                    cmsg = self.db.db.message_cache.find_one({ '$and':
+                        [{'chatid': chatid}, {'msg_id': msgid}]
+                    })
+                    if not cmsg:
+                        print('> id', msgid, 'not found...?')
+                    results.append(self.clone_messaage_with_data(cmsg, ['last', 'used']))
+            if len(results) > 0:
+                update.inline_query.answer(
+                    results,
+                    cache_time=20,
+                    is_personal=True
+                )
+                return
             if len(colls) < 1:
                 results.append(
                     InlineQueryResultArticle(
@@ -334,9 +395,8 @@ class IstorayjeBot:
                         input_message_content=InputTextMessageContent(f'<imaginary result matching {" ".join(query)}>')
                     )
                 )
-            userdata = self.db.db.storage.find_one({'user_id': update.inline_query.from_user.id})
+                cachetime = 60
             tempid = userdata.get('temp', None)
-            chatid = userdata['collection'][coll]['id']
             print(userdata)
 
             if not tempid:
@@ -347,6 +407,7 @@ class IstorayjeBot:
                         input_message_content=InputTextMessageContent('This user is actually dumb')
                     )
                 )
+                cachetime = 0
                 colls = []
             else:
                 tempid = tempid['id']
@@ -369,11 +430,12 @@ class IstorayjeBot:
                         print(msg)
                         cloned_message = self.try_clone_message(msg, col[1], id=col[0], chid=chatid)
                         msg.delete()
+                    
                     if not cloned_message:
                         continue
                     results.append(cloned_message)
                 except Exception as e:
-
+                    cachetime = 10
                     results.append(
                         InlineQueryResultArticle(
                         id=uuid4(),
@@ -381,16 +443,21 @@ class IstorayjeBot:
                         input_message_content=InputTextMessageContent(f'This bot is actually dumb\nException: {e}')
                         )
                     )
-            update.inline_query.answer(results)
+            update.inline_query.answer(
+                results,
+                cache_time=cachetime,
+                is_personal=True
+            )
         except Exception as e:
             print(e)
+            traceback.print_exc()
             update.inline_query.answer([
                 InlineQueryResultArticle(
                         id=uuid4(),
                         title=f'Exception <{e}> occured while processing {query} in {coll}',
-                        input_message_content=InputTextMessageContent('This bot is actually dumb\nHint: you might be searching a nonexistent collection')
+                        input_message_content=InputTextMessageContent(f'This bot is actually dumb\n{e}\nHint: you might be searching a nonexistent collection')
                 )
-            ])
+            ], cache_time=10)
 
     def start_option_set(self, bot, update):
         # update.message.reply_text('Add this bot to a group/channel (or use this chat) and give me its ID or username')
@@ -447,6 +514,7 @@ class IstorayjeBot:
                     'index': [],
                     'temp': []
                     },
+                'last_used.' + context['option']: []
                 }
         }, upsert=True)
         try:
