@@ -1,11 +1,11 @@
 from telegram.ext import (
     Updater, CommandHandler, InlineQueryHandler,
-    ConversationHandler, RegexHandler, MessageHandler,
+    MessageHandler,
     Filters
 )
 from telegram import (
     InlineQueryResultArticle, ParseMode,
-    InputTextMessageContent, 
+    InputTextMessageContent,
     InlineQueryResultCachedDocument, InlineQueryResultCachedPhoto, InlineQueryResultCachedGif,
     InlineQueryResultCachedMpeg4Gif, InlineQueryResultCachedSticker
 )
@@ -34,7 +34,7 @@ class IstorayjeBot:
     def start_polling(self):
         self.updater.start_polling()
         self.updater.idle()
-    
+
     def start_webhook(self):
         PORT = int(os.environ.get("PORT", "8443"))
         HEROKU_APP_NAME = os.environ.get("HEROKU_APP_NAME")
@@ -85,6 +85,10 @@ class IstorayjeBot:
         move = False
         tags = None
         delete = False
+        add = False
+        reset = False
+        remove = False
+
         try:
             text = msg.text
             if text.startswith('set:'):
@@ -94,13 +98,13 @@ class IstorayjeBot:
                 delete = True
             elif text.startswith('^set:'):
                 reset = True
-                tags = re.split(res.reg, text[5:].strip())
+                tags = re.split(self.reg, text[5:].strip())
             elif text.startswith('^add:'):
                 add = True
-                tags = re.split(res.reg, text[5:].strip())
+                tags = re.split(self.reg, text[5:].strip())
             elif text.startswith('^remove:'):
                 remove = True
-                tags = re.split(res.reg, text[8:].strip())
+                tags = re.split(self.reg, text[8:].strip())
         except Exception:
             pass
         for user in users:
@@ -126,7 +130,7 @@ class IstorayjeBot:
                             }
                             for coll in collections
                         }
-                    except:
+                    except Exception as e:
                         print(e)
                 elif move:
                     updateop = {
@@ -200,7 +204,7 @@ class IstorayjeBot:
         else:
             update.message.reply_text('You should get a json file now...')
             update.message.reply_document(document=BytesIO(bytes(s, 'utf8')), filename="collection.json")
-        
+
     reg = re.compile(r'\s+')
 
     def parse_query(self, query):
@@ -283,7 +287,7 @@ class IstorayjeBot:
                 return self.clone_messaage_with_data(data, tags)
             except:
                 try:
-                    sticker = message.sticker 
+                    sticker = message.sticker
                     assert (sticker is not None)
                     data = {
                         'type': 'sticker',
@@ -301,18 +305,18 @@ class IstorayjeBot:
         try:
             coll, query = self.parse_query(update.inline_query.query)
             print(coll, query)
-            colls = list((x['index']['id'], x['index']['tags']) for x in 
+            colls = list((x['index']['id'], x['index']['tags']) for x in
                 self.db.db.storage.aggregate([
                 {'$match': {
                     'user_id': update.inline_query.from_user.id
                     }
-                }, 
+                },
                 {'$project': {
                     "index": '$collection.' + coll + '.index',
                     '_id': 0
                     }
-                }, 
-                {'$unwind': '$index'}, 
+                },
+                {'$unwind': '$index'},
                 {'$match': {
                     'index.tags': {
                         '$all': query
@@ -369,7 +373,7 @@ class IstorayjeBot:
                         continue
                     results.append(cloned_message)
                 except Exception as e:
-                    
+
                     results.append(
                         InlineQueryResultArticle(
                         id=uuid4(),
@@ -473,7 +477,7 @@ class IstorayjeBot:
         msg.reply_text(
             'set: test msg message useless example'
         )
-        
+
         update.message.reply_text(
             'To search any given collection, use the bot\'s inline interface as such:\n' +
             '    @istorayjebot _collection_ _query_\n' +
