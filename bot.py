@@ -152,7 +152,7 @@ class IstorayjeBot:
                         for coll in collections
                     }
                     updateop = {
-                        '$push': {
+                        '$pushAll': {
                             f'collection.{coll}.index.$.tags': tags
                         }
                         for coll in collections
