@@ -17,6 +17,14 @@ from io import BytesIO
 from uuid import uuid4, UUID
 import traceback
 
+def get_any(obj, lst):
+    for prop in lst:
+        if hasattr(obj, prop):
+            mm = getattr(obj, prop, None)
+            if mm is not None:
+                return mm
+    return None
+
 class IstorayjeBot:
     def __init__(self, token, db: DB):
         self.token = token
@@ -51,6 +59,7 @@ class IstorayjeBot:
             CommandHandler('connect', self.start_option_set),
             CommandHandler('temp', self.set_temp),
             CommandHandler('set', self.set_option),
+            CommandHandler('reverse', self.reverse_search),
             CommandHandler('help', self.help),
             ChosenInlineResultHandler(self.on_result_chosen),
             InlineQueryHandler(self.handle_query,
@@ -63,7 +72,7 @@ class IstorayjeBot:
             f'''Hello there General Kenobi - {update.message.from_user.id}@{update.message.chat.id}\nWe are live at {bot}'''
         )
 
-
+    
     def on_result_chosen(self, bot, update):
         result = update.chosen_inline_result
         result_id = result.result_id
@@ -99,6 +108,62 @@ class IstorayjeBot:
 
     def handle_possible_index_update(self, bot, update):
         print('<<<', update)
+        reverse = self.context.get('do_reverse', [])
+        if update.message.chat.id in reverse:
+            # do a reverse document to tag search
+            try:
+                fid = get_any(update.message, ['document', 'sticker']).file_id
+                wtf = list(self.db.db.message_cache.aggregate([
+                    {'$match': {'file_id': fid}}, 
+                    {'$project': {'file_id': 0, 'type': 0}}, 
+                    {'$lookup': {
+                        'from': 'storage',
+                        'let': {
+                            'chatid': '$chatid',
+                            'msgid': '$msg_id'
+                        }, 
+                        'pipeline': [
+                            {'$project': {'collections': {'$objectToArray': '$collection'}}},
+                            {'$unwind': '$collections'}, 
+                            {'$project': {'_id': 0}},
+                            {'$project': {'elem': '$collections.v.index'}}, 
+                            {'$unwind': '$elem'},
+                            {'$project': {'id': '$elem.id', 'tags': '$elem.tags'}},
+                            {'$match': {
+                                '$expr': {
+                                    '$eq': ['$id', '$$msgid']
+                                }
+                            }}, 
+                            {'$project': {'tags': 1}}
+                        ],
+                        'as': 'tag' 
+                    }},
+                    {'$unwind': '$tag'},
+                    {'$replaceRoot': {'newRoot': '$tag'}},
+                    {'$group': {'_id': "$_id", 'tags': {'$addToSet': '$tags'}}},
+                    {'$project': {
+                        'result': {
+                            '$reduce': {
+                                'input': '$tags',
+                                'initialValue': [],
+                                'in': {
+                                    '$concatArrays': ['$$value', '$$this']
+                                }
+                            }
+                        }
+                    }},
+                    {'$project': {'_id': 0}}
+                ]))[0]['result']
+                print(wtf)
+                update.message.reply_text(
+                    'Found these tags:\n' + 
+                    '    ' + ' '.join(wtf)
+                )
+            except:
+                traceback.print_exc()
+                pass
+            return
+
         try:
             username = '@' + update.message.chat.username
         except:
@@ -579,4 +644,11 @@ class IstorayjeBot:
         msg.reply_text(
             '^add: newtag another-new-tag'
         )
-
+    
+    def reverse_search(self, bot, update):
+        update.message.reply_text(
+            'Send the document/image/GIF (text will not be processed)'
+        )
+        ctx = self.context.get('do_reverse', [])
+        ctx.append(update.message.from_user.id)
+        self.context['do_reverse'] = ctx
