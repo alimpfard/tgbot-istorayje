@@ -71,15 +71,17 @@ class IstorayjeBot:
             UUID(result_id, version=4)
             return # we don't want to cache these fuckers
         except:
-            pass
-
+            result_id = int(result_id)
         user = result.from_user.id
         coll, *_ = self.parse_query(result.query)
         print(f'> chosen result {result_id} for user {user} - collection {coll}')
         doc = self.db.db.storage.find_one({'user_id': user})
-        print(f"> {user}'s last_used: {doc['last_used'][coll]}")
-        print(f'>> last used count', len(doc['last_used'][coll]))
-        if len(doc['last_used'][coll]) > 5:
+        last_used = doc['last_used'][coll]
+        if result_id in last_used:
+            return 
+        print(f"> {user}'s last_used: {last_used}")
+        print(f'>> last used count', len(last_used))
+        if len(last_used) > 5:
             count = self.db.db.storage.update_one({
                 'user_id': user
             }, {
