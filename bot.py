@@ -76,6 +76,13 @@ class IstorayjeBot:
         user = result.from_user.id
         coll, *_ = self.parse_query(result.query)
         print(f'> chosen result {result_id} for user {user} - collection {coll}')
+        doc = self.db.db.storage.find_one({'user_id': user})
+        if len(doc['last_used'][coll]) > 5:
+            self.db.db.storage.update_one({
+                'user_id': user
+            }, {
+                '$pop': {f'last_used.{coll}': -1}
+            })
         doc = self.db.db.storage.find_one_and_update({
             'user_id': user
         }, {
@@ -83,12 +90,6 @@ class IstorayjeBot:
                 f'last_used.{coll}': int(result_id)
             }
         }, return_document=True)
-        if len(doc['last_used'][coll]) > 5:
-            self.db.db.storage.update_one({
-                'user_id': user
-            }, {
-                '$pop': {f'last_used.{coll}': -1}
-            })
 
     def handle_possible_index_update(self, bot, update):
         print('<<<', update)
