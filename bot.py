@@ -186,7 +186,7 @@ class IstorayjeBot:
                         }
                         for coll in collections
                     }
-                print(updateop)
+                print(updateop, filterop)
                 filterop.update({
                     'user_id': user,
                 })
