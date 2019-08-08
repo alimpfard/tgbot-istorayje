@@ -85,7 +85,13 @@ class IstorayjeBot:
         user = result.from_user.id
         coll, *_ = self.parse_query(result.query)
         print(f'> chosen result {result_id} for user {user} - collection {coll}')
-        doc = self.db.db.storage.find_one({'user_id': user})
+        doc = self.db.db.storage.find_one_and_update({
+            'user_id': user
+        }, {
+            '$inc': {
+                'used_count': 1
+            }
+        }, return_document=True)
         last_used = doc['last_used'][coll]
         if result_id in last_used:
             return 
