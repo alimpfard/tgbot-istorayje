@@ -144,29 +144,35 @@ class IstorayjeBot:
                 elif add:
                     filterop = {
                         f'collection.{coll}.index.id': msg.reply_to_message.message_id
+                        for coll in collections
                     }
                     updateop = {
                         '$push': {
                             f'collection.{coll}.$.tags': tags
                         }
+                        for coll in collections
                     }
                 elif remove:
                     filterop = {
                         f'collection.{coll}.index.id': msg.reply_to_message.message_id
+                        for coll in collections
                     }
                     updateop = {
                         '$pullAll': {
                             f'collection.{coll}.$.tags': tags
                         }
+                        for coll in collections
                     }
                 elif reset:
                     filterop = {
                         f'collection.{coll}.index.id': msg.reply_to_message.message_id
+                        for coll in collections
                     }
                     updateop = {
                         '$set': {
                             f'collection.{coll}.$.tags': tags
                         }
+                        for coll in collections
                     }
                 else:
                     updateop = {
