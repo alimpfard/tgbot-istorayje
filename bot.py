@@ -358,7 +358,13 @@ class IstorayjeBot:
                 },
                 {'$limit': 5}
             ]))
-            results = []
+            results = [InlineQueryResultArticle(
+                id=uuid(),
+                title='>> ' + ' '.join(query),
+                input_message_content=InputTextMessageContent(
+                    'Search for `' + ' '.join(query) + '\' and more~'
+                )
+            )]
             userdata = self.db.db.storage.find_one({'user_id': update.inline_query.from_user.id})
             chatid = userdata['collection'][coll]['id']
             cachetime = 300
@@ -380,7 +386,7 @@ class IstorayjeBot:
                     if not cmsg:
                         print('> id', msgid, 'not found...?')
                     results.append(self.clone_messaage_with_data(cmsg, ['last', 'used']))
-            if len(results) > 0:
+            if len(results) > 1:
                 update.inline_query.answer(
                     results,
                     cache_time=20,
