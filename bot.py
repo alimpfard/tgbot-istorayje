@@ -91,6 +91,15 @@ class IstorayjeBot:
                 tags = re.split(self.reg, text[4:].strip())
             elif text.startswith('^delete'):
                 delete = True
+            elif text.startswith('^set:'):
+                reset = True
+                tags = re.split(res.reg, text[5:].strip())
+            elif text.startswith('^add:'):
+                add = True
+                tags = re.split(res.reg, text[5:].strip())
+            elif text.startswith('^remove:'):
+                remove = True
+                tags = re.split(res.reg, text[8:].strip())
         except Exception:
             pass
         for user in users:
@@ -105,6 +114,7 @@ class IstorayjeBot:
                         ])
                     )
                 print('>> collections:', collections)
+                filterop = {}
                 if delete:
                     print(msg)
                     try:
@@ -131,6 +141,33 @@ class IstorayjeBot:
                         }
                         for coll in collections
                     })
+                elif add:
+                    filterop = {
+                        f'collection.{coll}.index.id': msg.reply_to_message.message_id
+                    }
+                    updateop = {
+                        '$push': {
+                            f'collection.{coll}.$.tags': tags
+                        }
+                    }
+                elif remove:
+                    filterop = {
+                        f'collection.{coll}.index.id': msg.reply_to_message.message_id
+                    }
+                    updateop = {
+                        '$pullAll': {
+                            f'collection.{coll}.$.tags': tags
+                        }
+                    }
+                elif reset:
+                    filterop = {
+                        f'collection.{coll}.index.id': msg.reply_to_message.message_id
+                    }
+                    updateop = {
+                        '$set': {
+                            f'collection.{coll}.$.tags': tags
+                        }
+                    }
                 else:
                     updateop = {
                         '$addToSet': {
@@ -139,9 +176,10 @@ class IstorayjeBot:
                         for coll in collections
                     }
                 print(updateop)
-                self.db.db.storage.update_one({
-                    'user_id': user
-                }, updateop)
+                filterop.update({
+                    'user_id': user,
+                })
+                self.db.db.storage.update_one(filterop, updateop)
             except Exception as e:
                 print(e)
 
