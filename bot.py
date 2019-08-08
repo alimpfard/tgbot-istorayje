@@ -87,7 +87,7 @@ class IstorayjeBot:
             self.db.db.storage.update_one({
                 'user_id': user
             }, {
-                '$pop': {f'last_used.{coll}': 1}
+                '$pop': {f'last_used.{coll}': -1}
             })
 
     def handle_possible_index_update(self, bot, update):
