@@ -12,6 +12,8 @@ bot = IstorayjeBot(os.environ['TOKEN'], DB(url=os.environ['MONGO_URL']))
 
 mode = os.environ.get('MODE', 'dev')
 
+print('Starting to do shit')
+
 if mode == 'prod':
     bot.start_webhook()
 else:
