@@ -359,10 +359,10 @@ class IstorayjeBot:
                 {'$limit': 5}
             ]))
             results = [InlineQueryResultArticle(
-                id=uuid(),
-                title='>> ' + ' '.join(query),
+                id=uuid4(),
+                title='>> ' + ' '.join(query or ['Your', 'Recent', 'Selections']),
                 input_message_content=InputTextMessageContent(
-                    'Search for `' + ' '.join(query) + '\' and more~'
+                    'Search for `' + ' '.join(query) + '\' and more~' if len(query) else 'Yes, these are your recents'
                 )
             )]
             userdata = self.db.db.storage.find_one({'user_id': update.inline_query.from_user.id})
