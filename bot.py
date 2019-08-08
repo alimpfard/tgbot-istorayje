@@ -110,6 +110,8 @@ class IstorayjeBot:
         print('<<<', update)
         reverse = self.context.get('do_reverse', [])
         if update.message.chat.id in reverse:
+            reverse.remove(update.message.chat.id)
+            self.context['do_reverse'] = reverse
             # do a reverse document to tag search
             try:
                 fid = get_any(update.message, ['document', 'sticker']).file_id
@@ -154,7 +156,7 @@ class IstorayjeBot:
                     }},
                     {'$project': {'_id': 0}}
                 ]))
-                
+
                 if len(wtf) == 0:
                     # nothing matched
                     update.message.reply_text('no documents matching your query found')
