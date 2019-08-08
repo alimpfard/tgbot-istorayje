@@ -485,3 +485,17 @@ class IstorayjeBot:
             '    @istorayjebot gif misaka nah',
             parse_mode=ParseMode.MARKDOWN
         )
+        update.message.reply_text(
+            'Further modifications to entries are done through the provided operators, by replying to a tagged message\n' +
+            '    `^set:` - set the tags, overwrites the previous values\n' +
+            '    `^add:` - adds a tag to the previous set\n' +
+            '    `^remove:` - removes a tag from the previous set\n' +
+            '    `^delete` - deletes the entry from the index\n' +
+            '\n' +
+            'for example:',
+            parse_mode=ParseMode.MARKDOWN
+        )
+        msg.reply_text(
+            '^add: newtag another-new-tag'
+        )
+
