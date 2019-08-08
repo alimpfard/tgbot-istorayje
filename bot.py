@@ -153,7 +153,14 @@ class IstorayjeBot:
                         }
                     }},
                     {'$project': {'_id': 0}}
-                ]))[0]['result']
+                ]))
+                
+                if len(wtf) == 0:
+                    # nothing matched
+                    update.message.reply_text('no documents matching your query found')
+                    return
+
+                wtf = wtf[0]['result']
                 print(wtf)
                 update.message.reply_text(
                     'Found these tags:\n' + 
