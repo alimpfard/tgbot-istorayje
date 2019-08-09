@@ -716,7 +716,7 @@ class IstorayjeBot:
     def reverse_search_fuzzy(self, bot, update):
         self.reverse_search(bot, update, fuzzy=True)
 
-    def rehash(self, bot, update):
+    def rehash_all(self, bot, update):
         index = list((x['_id'], x['file_id'])
                      for x in self.db.db.message_hash.find() if hasattr(x, 'file_id'))
         update.message.reply_text(f'found {len(index)} items, updating...')
