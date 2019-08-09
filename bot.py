@@ -10,6 +10,8 @@ from telegram import (
     InlineQueryResultCachedMpeg4Gif, InlineQueryResultCachedSticker
 )
 from telegram.ext import ChosenInlineResultHandler
+from googlecloud import getCloudAPIDetails
+from trace import getTraceAPIDetails
 
 from db import DB
 import re
@@ -19,7 +21,10 @@ from uuid import uuid4, UUID
 import traceback
 import json
 import xxhash
-
+import pickle
+from threading import Event
+from time import time
+from datetime import timedelta
 
 def get_any(obj, lst):
     for prop in lst:
@@ -38,7 +43,76 @@ class IstorayjeBot:
         for handler in self.create_handlers():
             self.register_handler(handler)
         self.updater.dispatcher.add_error_handler(self.error)
+
+        if not self.restore_jobs():
+            self.updater.job_queue.run_repeating(self.save_jobs, timedelta(minutes=5))
+            self.updater.job_queue.run_repeating(self.process_insertions, timedelta(seconds=5))
+
         self.context = {}
+    
+    def _dumpjobs(self, jq):
+        if jq:
+            job_tuples = jq._queue.queue
+        else:
+            job_tuples = []
+        
+        res_bins = []
+        for next_t, job in job_tuples:
+            # Back up objects
+            _job_queue = job._job_queue
+            _remove = job._remove
+            _enabled = job._enabled
+
+            # Replace un-pickleable threading primitives
+            job._job_queue = None  # Will be reset in jq.put
+            job._remove = job.removed  # Convert to boolean
+            job._enabled = job.enabled  # Convert to boolean
+
+            # Pickle the job
+            res_bins.append(pickle.dumps((next_t, job)))
+
+            # Restore objects
+            job._job_queue = _job_queue
+            job._remove = _remove
+            job._enabled = _enabled
+        
+        return res_bins
+
+    def save_jobs(self, context, *args, **kwargs):
+        self.db.db.jobs.find_one_and_replace({}, {'data': pickle.dumps(self._dumpjobs(context.job_queue))}, upsert=True)
+    
+    def restore_jobs(self):
+        jq = self.updater.job_queue
+        now = time()
+        jobs = None
+
+        try:
+            jobs = self.db.db.jobs.find_one_and_delete({})['data']
+        except:
+            jobs = []
+
+        for picl in jobs:
+            next_t, job = pickle.loads(picl)
+
+            # Create threading primitives
+            enabled = job._enabled
+            removed = job._remove
+
+            job._enabled = Event()
+            job._remove = Event()
+
+            if enabled:
+                job._enabled.set()
+
+            if removed:
+                job._remove.set()
+
+            next_t -= now  # Convert from absolute to relative time
+
+            jq._put(job, next_t)
+        
+        return jobs is not None and len(jobs) > 0
+
 
     def error(self, bot, update, error):
         print(f'[Error] Update {update} caused error {error}')
@@ -121,6 +195,104 @@ class IstorayjeBot:
         }, return_document=True)
         print(f"> {user}'s last_used: {doc['last_used'][coll]}")
 
+    def is_useful_tag(self, tag):
+        print(tag)
+        return re.sub(r'season|\s+', '', re.sub(r'[^A-z]', '', tag)) != ''
+
+    def tagify_all(self, *tags):
+        return list(filter(
+            self.is_useful_tag, 
+            sum(list(list(set([x.replace(' ', '_').lower()] + x.lower().split(' ') + list(re.sub('\\W', '', y.lower()) for y in x.split(' '))))
+                for x in tags if x), [])
+        ))
+
+    def process_insertions(self, *args, **kwargs):
+        while True:
+            doc = self.db.db.tag_updates.find_one_and_delete({})
+            if not doc:
+                break
+            instags = []
+
+            if doc['service'] == 'google':
+                print('google', doc)
+                details = getCloudAPIDetails(doc['filecontent'])
+                print(details)
+
+            elif doc['service'] == 'anime':
+
+                details = getTraceAPIDetails(doc['filecontent'])
+                if not details:
+                    print('no response')
+                    continue
+
+                docv = details['docs']
+                if len(docv) < 1:
+                    print('no results')
+                    continue
+
+                docv = docv[0]
+                if docv['similarity'] < doc['similarity_cap']:
+                    print('similarity cap hit')
+                    continue
+
+                instags = self.tagify_all(docv['title_english'], docv['title_romaji'], *docv['synonyms'])
+                if docv['is_adult']:
+                    instags.push('nsfw')
+            
+            if len(instags):
+                insps = list((x[0], a['index']) for x in doc['insertion_paths'] for a in self.db.db.storage.aggregate([
+                    {'$match': {'user_id': {'$in': doc['users']}}},
+                    {'$project': {'index': f'$collection.{x[0]}.index'}},
+                    {'$unwind': { 'path': '$index', 'includeArrayIndex': 'idx' }},
+                    {'$match': {'index.id': x[1]}},
+                    {'$project': {'index': '$idx'}}
+                ]))
+                ins = {'$addToSet': {f'collection.{p[0]}.index.{p[1]}.tags':{'$each': instags} for p in insps}}
+                print(ins)
+                self.db.db.storage.update_many({'user_id': {'$in': doc['users']}}, ins)
+            else:
+                print('no tags', docv)
+        return
+
+    def handle_magic_tags(self, tag: str, message: object, insertion_paths: list, early: bool, users: list):
+        if tag.startswith('$'):
+            if early:
+                return None
+            tag, *targs = tag[1:].split(':')
+            print('magic tag', tag, 'with args', targs)
+            insert = {
+                'service': '',
+                'filecontent': None,
+                'fileid': None,
+                'dlpath': None,
+                'insertion_paths': insertion_paths,
+                'users': users,
+            }
+            if tag in ['google', 'anime']:
+                doc = get_any(message, ['document'])
+                if not doc:
+                    print('doc is null', 'from', message)
+                    return None
+                
+                if any(x in doc.mime_type for x in ['png', 'jpg', 'jpeg']):
+                    insert['filecontent'] = bytes(self.updater.bot.get_file(file_id=doc.file_id).download_as_bytearray())
+                
+                elif any(x in doc.mime_type for x in ['gif', 'mp4']):
+                    insert['filecontent'] = bytes(self.updater.bot.get_file(file_id=doc.thumb.file_id).download_as_bytearray())
+                    insert['similarity_cap'] = int(targs[0])/100 if len(targs) else 0.6
+                else:
+                    print(doc.mime_type, 'is not supported')
+                    return None # shrug
+
+                insert['service'] = tag
+            else:
+                return 'unsupported_magic:' + tag
+            
+            if not insert['service']:
+                return None
+            self.db.db.tag_updates.insert_one(insert)
+            return None
+        return tag
     def handle_possible_index_update(self, bot, update):
         print('<<<', update)
         reverse = self.context.get('do_reverse', [])
@@ -255,6 +427,7 @@ class IstorayjeBot:
         for user in users:
             print('> processing', user)
             try:
+                mtags = tags
                 collections = list(x['collection']['k'] for x in
                                    self.db.db.storage.aggregate([
                                        {'$match': {'user_id': user}},
@@ -265,6 +438,27 @@ class IstorayjeBot:
                                    ])
                                    )
                 print('>> collections:', collections)
+                if mtags:
+                    m_msgid = None
+                    noreply = False
+                    m_msg = None
+                    try:
+                        m_msgid = msg.reply_to_message.message_id
+                        m_msg = msg.reply_to_message
+                    except:
+                        noreply = True
+                    mtags = list(set(x for x in [
+                        self.handle_magic_tags(
+                            early=noreply, 
+                            tag=x, 
+                            message=m_msg, 
+                            insertion_paths=[(coll, m_msgid) for coll in collections],
+                            users=[user]
+                        )
+                        for x in mtags
+                    ] if x is not None))
+                if not mtags and any([move, add, reset, remove]):
+                    return
                 filterop = {}
                 if delete:
                     print(msg)
@@ -281,7 +475,7 @@ class IstorayjeBot:
                 elif move:
                     updateop = {
                         '$push': {
-                            f'collection.{coll}.index': {'id': msgid, 'tags': tags}
+                            f'collection.{coll}.index': {'id': msgid, 'tags': mtags}
                             for coll in collections
                             for msgid in self.db.db.storage.find_one({'user_id': user})['collection'][coll]['temp']
                         }
@@ -299,7 +493,7 @@ class IstorayjeBot:
                     }
                     updateop = {
                         '$push': {
-                            f'collection.{coll}.index.$.tags': {'$each': tags}
+                            f'collection.{coll}.index.$.tags': {'$each': mtags}
                             for coll in collections
                         }
                     }
@@ -310,7 +504,7 @@ class IstorayjeBot:
                     }
                     updateop = {
                         '$pullAll': {
-                            f'collection.{coll}.index.$.tags': tags
+                            f'collection.{coll}.index.$.tags': mtags
                             for coll in collections
                         }
                     }
@@ -321,7 +515,7 @@ class IstorayjeBot:
                     }
                     updateop = {
                         '$set': {
-                            f'collection.{coll}.index.$.tags': tags
+                            f'collection.{coll}.index.$.tags': mtags
                             for coll in collections
                         }
                     }

@@ -12,6 +12,7 @@ python-telegram-bot = "*"
 pymongo = "*"
 dnspython = "*"
 xxhash = "*"
+requests = "*"
 
 [requires]
 python_version = "3.7"
