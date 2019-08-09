@@ -203,7 +203,8 @@ class IstorayjeBot:
                 traceback.print_exc()
                 pass
             return
-
+        
+        # probably index update...or stray message
         try:
             username = '@' + update.message.chat.username
         except:
