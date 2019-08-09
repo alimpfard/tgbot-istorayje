@@ -203,7 +203,7 @@ class IstorayjeBot:
                 traceback.print_exc()
                 pass
             return
-        
+
         # probably index update...or stray message
         try:
             username = '@' + update.message.chat.username
@@ -270,8 +270,8 @@ class IstorayjeBot:
                         updateop = {
                             '$pull': {
                                 f'collection.{coll}.index': {'id': msgid}
+                                for coll in collections
                             }
-                            for coll in collections
                         }
                     except Exception as e:
                         print(e)
@@ -279,15 +279,15 @@ class IstorayjeBot:
                     updateop = {
                         '$push': {
                             f'collection.{coll}.index': {'id': msgid, 'tags': tags}
+                            for coll in collections
+                            for msgid in self.db.db.storage.find_one({'user_id': user})['collection'][coll]['temp']
                         }
-                        for coll in collections
-                        for msgid in self.db.db.storage.find_one({'user_id': user})['collection'][coll]['temp']
                     }
                     updateop.update({
                         '$set': {
                             f'collection.{coll}.temp': []
+                            for coll in collections
                         }
-                        for coll in collections
                     })
                 elif add:
                     filterop = {
@@ -297,8 +297,8 @@ class IstorayjeBot:
                     updateop = {
                         '$push': {
                             f'collection.{coll}.index.$.tags': {'$each': tags}
+                            for coll in collections
                         }
-                        for coll in collections
                     }
                 elif remove:
                     filterop = {
@@ -308,8 +308,8 @@ class IstorayjeBot:
                     updateop = {
                         '$pullAll': {
                             f'collection.{coll}.index.$.tags': tags
+                            for coll in collections
                         }
-                        for coll in collections
                     }
                 elif reset:
                     filterop = {
@@ -319,15 +319,15 @@ class IstorayjeBot:
                     updateop = {
                         '$set': {
                             f'collection.{coll}.index.$.tags': tags
+                            for coll in collections
                         }
-                        for coll in collections
                     }
                 else:
                     updateop = {
                         '$addToSet': {
                             'collection.' + coll + '.temp': msg.message_id
+                            for coll in collections
                         }
-                        for coll in collections
                     }
                 print(updateop, filterop)
                 filterop.update({
@@ -455,7 +455,8 @@ class IstorayjeBot:
             if not coll or coll == '':
                 return
 
-            print(coll, query            if any(x in coll for x in '$./[]'):
+            print(coll, query)
+            if any(x in coll for x in '$./[]'):
                 update.inline_query.answer(
                     [InlineQueryResultArticle(id=uuid4(), title='Invalid collection name "' + coll + '"',
                                               input_message_content=InputTextMessageContent('This user is an actual idiot'))]
@@ -610,9 +611,9 @@ class IstorayjeBot:
             return
 
         if any(x in txt for x in '$./[]'):
-            update.message.reply_text('Invalid collection name "' + coll + '"')
+            update.message.reply_text('Invalid collection name "' + txt + '"')
             return
-        
+
         update.message.reply_text('setting option ' + txt)
         context = {}
         context['option'] = txt
@@ -723,7 +724,7 @@ class IstorayjeBot:
         self.context['do_reverse'] = ctx
         fz[update.message.from_user.id] = fuzzy
         self.context['fuzz_reverse'] = fz
-    
+
     def reverse_search_fuzzy(self, bot, update):
         self.reverse_search(bot, update, fuzzy=True)
 
