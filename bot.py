@@ -46,7 +46,7 @@ class IstorayjeBot:
 
         if not self.restore_jobs():
             self.updater.job_queue.run_repeating(self.save_jobs, timedelta(minutes=5))
-            self.updater.job_queue.run_repeating(self.process_insertions, timedelta(seconds=5))
+            self.updater.job_queue.run_repeating(self.process_insertions, timedelta(minutes=1))
 
         self.context = {}
     
