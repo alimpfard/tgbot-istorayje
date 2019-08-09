@@ -40,7 +40,7 @@ class IstorayjeBot:
         self.updater.dispatcher.add_error_handler(self.error)
         self.context = {}
 
-    def error(self, update, error):
+    def error(self, bot, update, error):
         print(f'[Error] Update {update} caused error {error}')
 
     def register_handler(self, handler):
@@ -722,8 +722,11 @@ class IstorayjeBot:
         update.message.reply_text(f'found {len(index)} items, updating...')
         mod = 0
         for item in index:
-            h = xxhash.xxh64(self.updater.bot.get_file(
-                file_id=item[1]).download_as_bytearray()).digest()
-            mod += self.db.db.message_cache.update_one(
-                {'_id': item[0]}, {'$set': {'xxhash': h}}).modified_count
+            try:
+                h = xxhash.xxh64(self.updater.bot.get_file(
+                    file_id=item[1]).download_as_bytearray()).digest()
+                mod += self.db.db.message_cache.update_one(
+                    {'_id': item[0]}, {'$set': {'xxhash': h}}).modified_count
+            except:
+                traceback.print_exc()
         update.message.reply_text(f'Rehash done, updated {mod} entries')
