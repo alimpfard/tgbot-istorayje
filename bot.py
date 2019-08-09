@@ -125,84 +125,87 @@ class IstorayjeBot:
         print('<<<', update)
         reverse = self.context.get('do_reverse', [])
         fuzz = self.context.get('fuzz_reverse', {})
-        if update.message.chat.id in reverse:
-            fuzzy = False
-            reverse.remove(update.message.chat.id)
-            self.context['do_reverse'] = reverse
-            if fuzz.get(update.message.chat.id, False):
-                fuzzy = True
-            fuzz.pop(update.message.chat.id, None)
-            self.context['fuzz_reverse'] = fuzz
-            # do a reverse document to tag search
-            try:
-                mfield = 'file_id'
-                mvalue = get_any(update.message, ['document', 'sticker']).file_id
-                if fuzzy:
-                    update.message.reply_text(
-                        'Please wait, this might take a moment'
-                    )
-                    mvalue = xxhash.xxh64(self.updater.bot.get_file(file_id=mvalue).download_as_bytearray()).digest()
-                    mfield = 'xxhash'
-                print(f'going to look at {mfield} for {mvalue}')
-                wtf = list(self.db.db.message_cache.aggregate([
-                    {'$match': {mfield: mvalue}},
-                    {'$project': {'file_id': 0, 'type': 0}},
-                    {'$lookup': {
-                        'from': 'storage',
-                        'let': {
-                            'chatid': '$chatid',
-                            'msgid': '$msg_id'
-                        },
-                        'pipeline': [
-                            {'$project': {'collections': {
-                                '$objectToArray': '$collection'}}},
-                            {'$unwind': '$collections'},
-                            {'$project': {'_id': 0}},
-                            {'$project': {'elem': '$collections.v.index'}},
-                            {'$unwind': '$elem'},
-                            {'$project': {'id': '$elem.id', 'tags': '$elem.tags'}},
-                            {'$match': {
-                                '$expr': {
-                                    '$eq': ['$id', '$$msgid']
-                                }
-                            }},
-                            {'$project': {'tags': 1}}
-                        ],
-                        'as': 'tag'
-                    }},
-                    {'$unwind': '$tag'},
-                    {'$replaceRoot': {'newRoot': '$tag'}},
-                    {'$group': {'_id': "$_id", 'tags': {'$addToSet': '$tags'}}},
-                    {'$project': {
-                        'result': {
-                            '$reduce': {
-                                'input': '$tags',
-                                'initialValue': [],
-                                'in': {
-                                    '$concatArrays': ['$$value', '$$this']
+        try:
+            if update.message.chat.id in reverse:
+                fuzzy = False
+                reverse.remove(update.message.chat.id)
+                self.context['do_reverse'] = reverse
+                if fuzz.get(update.message.chat.id, False):
+                    fuzzy = True
+                fuzz.pop(update.message.chat.id, None)
+                self.context['fuzz_reverse'] = fuzz
+                # do a reverse document to tag search
+                try:
+                    mfield = 'file_id'
+                    mvalue = get_any(update.message, ['document', 'sticker']).file_id
+                    if fuzzy:
+                        update.message.reply_text(
+                            'Please wait, this might take a moment'
+                        )
+                        mvalue = xxhash.xxh64(self.updater.bot.get_file(file_id=mvalue).download_as_bytearray()).digest()
+                        mfield = 'xxhash'
+                    print(f'going to look at {mfield} for {mvalue}')
+                    wtf = list(self.db.db.message_cache.aggregate([
+                        {'$match': {mfield: mvalue}},
+                        {'$project': {'file_id': 0, 'type': 0}},
+                        {'$lookup': {
+                            'from': 'storage',
+                            'let': {
+                                'chatid': '$chatid',
+                                'msgid': '$msg_id'
+                            },
+                            'pipeline': [
+                                {'$project': {'collections': {
+                                    '$objectToArray': '$collection'}}},
+                                {'$unwind': '$collections'},
+                                {'$project': {'_id': 0}},
+                                {'$project': {'elem': '$collections.v.index'}},
+                                {'$unwind': '$elem'},
+                                {'$project': {'id': '$elem.id', 'tags': '$elem.tags'}},
+                                {'$match': {
+                                    '$expr': {
+                                        '$eq': ['$id', '$$msgid']
+                                    }
+                                }},
+                                {'$project': {'tags': 1}}
+                            ],
+                            'as': 'tag'
+                        }},
+                        {'$unwind': '$tag'},
+                        {'$replaceRoot': {'newRoot': '$tag'}},
+                        {'$group': {'_id': "$_id", 'tags': {'$addToSet': '$tags'}}},
+                        {'$project': {
+                            'result': {
+                                '$reduce': {
+                                    'input': '$tags',
+                                    'initialValue': [],
+                                    'in': {
+                                        '$concatArrays': ['$$value', '$$this']
+                                    }
                                 }
                             }
-                        }
-                    }},
-                    {'$project': {'_id': 0}}
-                ]))
+                        }},
+                        {'$project': {'_id': 0}}
+                    ]))
 
-                if len(wtf) == 0:
-                    # nothing matched
+                    if len(wtf) == 0:
+                        # nothing matched
+                        update.message.reply_text(
+                            'no documents matching your query found')
+                        return
+
+                    wtf = wtf[0]['result']
+                    print(wtf)
                     update.message.reply_text(
-                        'no documents matching your query found')
-                    return
-
-                wtf = wtf[0]['result']
-                print(wtf)
-                update.message.reply_text(
-                    'Found these tags:\n' +
-                    '    ' + ' '.join(wtf)
-                )
+                        'Found these tags:\n' +
+                        '    ' + ' '.join(wtf)
+                    )
+                except:
+                    traceback.print_exc()
+                    pass
+                return
             except:
-                traceback.print_exc()
                 pass
-            return
 
         # probably index update...or stray message
         try:
