@@ -12,11 +12,14 @@ from telegram import (
 from telegram.ext import ChosenInlineResultHandler
 
 from db import DB
-import re, os
+import re
+import os
 from io import BytesIO
 from uuid import uuid4, UUID
 import traceback
 import json
+import xxhash
+
 
 def get_any(obj, lst):
     for prop in lst:
@@ -25,6 +28,7 @@ def get_any(obj, lst):
             if mm is not None:
                 return mm
     return None
+
 
 class IstorayjeBot:
     def __init__(self, token, db: DB):
@@ -49,8 +53,10 @@ class IstorayjeBot:
     def start_webhook(self):
         PORT = int(os.environ.get("PORT", "8443"))
         HEROKU_APP_NAME = os.environ.get("HEROKU_APP_NAME")
-        self.updater.start_webhook(listen="0.0.0.0", port=PORT, url_path=self.token)
-        self.updater.bot.setWebhook("https://{}.herokuapp.com/{}".format(HEROKU_APP_NAME, self.token))
+        self.updater.start_webhook(
+            listen="0.0.0.0", port=PORT, url_path=self.token)
+        self.updater.bot.setWebhook(
+            "https://{}.herokuapp.com/{}".format(HEROKU_APP_NAME, self.token))
         self.updater.idle()
 
     def create_handlers(self):
@@ -61,6 +67,8 @@ class IstorayjeBot:
             CommandHandler('temp', self.set_temp),
             CommandHandler('set', self.set_option),
             CommandHandler('reverse', self.reverse_search),
+            CommandHandler('reverse_fuzzy', self.reverse_search_fuzzy),
+            CommandHandler('rehash', self.rehash_all),
             CommandHandler('help', self.help),
             ChosenInlineResultHandler(self.on_result_chosen),
             InlineQueryHandler(self.handle_query,
@@ -73,18 +81,18 @@ class IstorayjeBot:
             f'''Hello there General Kenobi - {update.message.from_user.id}@{update.message.chat.id}\nWe are live at {bot}'''
         )
 
-    
     def on_result_chosen(self, bot, update):
         result = update.chosen_inline_result
         result_id = result.result_id
         try:
             UUID(result_id, version=4)
-            return # we don't want to cache these fuckers
+            return  # we don't want to cache these fuckers
         except:
             result_id = int(result_id)
         user = result.from_user.id
         coll, *_ = self.parse_query(result.query)
-        print(f'> chosen result {result_id} for user {user} - collection {coll}')
+        print(
+            f'> chosen result {result_id} for user {user} - collection {coll}')
         doc = self.db.db.storage.find_one_and_update({
             'user_id': user
         }, {
@@ -94,7 +102,7 @@ class IstorayjeBot:
         }, return_document=True)
         last_used = doc['last_used'][coll]
         if result_id in last_used:
-            return 
+            return
         print(f"> {user}'s last_used: {last_used}")
         print(f'>> last used count', len(last_used))
         if len(last_used) > 5:
@@ -116,36 +124,50 @@ class IstorayjeBot:
     def handle_possible_index_update(self, bot, update):
         print('<<<', update)
         reverse = self.context.get('do_reverse', [])
+        fuzz = self.context.get('fuzz_reverse', {})
         if update.message.chat.id in reverse:
+            fuzzy = False
             reverse.remove(update.message.chat.id)
             self.context['do_reverse'] = reverse
+            if fuzz.get(update.message.chat.id, False):
+                fuzzy = True
+            fuzz.pop(update.message.chat.id, None)
+            self.context['fuzz_reverse'] = fuzz
             # do a reverse document to tag search
             try:
-                fid = get_any(update.message, ['document', 'sticker']).file_id
+                mfield = 'file_id'
+                mvalue = get_any(update.message, ['document', 'sticker']).file_id
+                if fuzzy:
+                    update.message.reply_text(
+                        'Please wait, this might take a moment'
+                    )
+                    mvalue = xxhash.xxh64(self.updater.bot.get_file(file_id=mvalue).download_as_bytearray()).digest()
+                    mfield = 'xxhash'
                 wtf = list(self.db.db.message_cache.aggregate([
-                    {'$match': {'file_id': fid}}, 
-                    {'$project': {'file_id': 0, 'type': 0}}, 
+                    {'$match': {mfield: mvalue}},
+                    {'$project': {'file_id': 0, 'type': 0}},
                     {'$lookup': {
                         'from': 'storage',
                         'let': {
                             'chatid': '$chatid',
                             'msgid': '$msg_id'
-                        }, 
+                        },
                         'pipeline': [
-                            {'$project': {'collections': {'$objectToArray': '$collection'}}},
-                            {'$unwind': '$collections'}, 
+                            {'$project': {'collections': {
+                                '$objectToArray': '$collection'}}},
+                            {'$unwind': '$collections'},
                             {'$project': {'_id': 0}},
-                            {'$project': {'elem': '$collections.v.index'}}, 
+                            {'$project': {'elem': '$collections.v.index'}},
                             {'$unwind': '$elem'},
                             {'$project': {'id': '$elem.id', 'tags': '$elem.tags'}},
                             {'$match': {
                                 '$expr': {
                                     '$eq': ['$id', '$$msgid']
                                 }
-                            }}, 
+                            }},
                             {'$project': {'tags': 1}}
                         ],
-                        'as': 'tag' 
+                        'as': 'tag'
                     }},
                     {'$unwind': '$tag'},
                     {'$replaceRoot': {'newRoot': '$tag'}},
@@ -166,13 +188,14 @@ class IstorayjeBot:
 
                 if len(wtf) == 0:
                     # nothing matched
-                    update.message.reply_text('no documents matching your query found')
+                    update.message.reply_text(
+                        'no documents matching your query found')
                     return
 
                 wtf = wtf[0]['result']
                 print(wtf)
                 update.message.reply_text(
-                    'Found these tags:\n' + 
+                    'Found these tags:\n' +
                     '    ' + ' '.join(wtf)
                 )
             except:
@@ -188,7 +211,7 @@ class IstorayjeBot:
             except:
                 print('uhhhh...🤷‍♀️')
         users = [x['chat'] for x in self.db.db.cindex.aggregate([
-            {'$match': {'index': { '$exists': username }} },
+            {'$match': {'index': {'$exists': username}}},
             {'$project': {'_id': 0, 'chat': '$index.' + username}},
             {'$unwind': '$chat'}
         ])]
@@ -228,13 +251,14 @@ class IstorayjeBot:
             print('> processing', user)
             try:
                 collections = list(x['collection']['k'] for x in
-                    self.db.db.storage.aggregate([
-                        {'$match': {'user_id': user}},
-                        {'$project': {'_id': 0, 'collection': {'$objectToArray': '$collection'}}},
-                        {'$unwind': '$collection'},
-                        {'$match': {'collection.v.id': username}}
-                        ])
-                    )
+                                   self.db.db.storage.aggregate([
+                                       {'$match': {'user_id': user}},
+                                       {'$project': {'_id': 0, 'collection': {
+                                           '$objectToArray': '$collection'}}},
+                                       {'$unwind': '$collection'},
+                                       {'$match': {'collection.v.id': username}}
+                                   ])
+                                   )
                 print('>> collections:', collections)
                 filterop = {}
                 if delete:
@@ -243,7 +267,7 @@ class IstorayjeBot:
                         msgid = msg.reply_to_message.message_id
                         updateop = {
                             '$pull': {
-                                f'collection.{coll}.index': { 'id': msgid }
+                                f'collection.{coll}.index': {'id': msgid}
                             }
                             for coll in collections
                         }
@@ -270,7 +294,7 @@ class IstorayjeBot:
                     }
                     updateop = {
                         '$push': {
-                            f'collection.{coll}.index.$.tags': { '$each': tags }
+                            f'collection.{coll}.index.$.tags': {'$each': tags}
                         }
                         for coll in collections
                     }
@@ -299,7 +323,7 @@ class IstorayjeBot:
                 else:
                     updateop = {
                         '$addToSet': {
-                             'collection.' + coll + '.temp': msg.message_id
+                            'collection.' + coll + '.temp': msg.message_id
                         }
                         for coll in collections
                     }
@@ -320,7 +344,8 @@ class IstorayjeBot:
             update.message.reply_text(s)
         else:
             update.message.reply_text('You should get a json file now...')
-            update.message.reply_document(document=BytesIO(bytes(json.dumps(coll['collection']), 'utf8')), filename="collection.json")
+            update.message.reply_document(document=BytesIO(
+                bytes(json.dumps(coll['collection']), 'utf8')), filename="collection.json")
 
     reg = re.compile(r'\s+')
 
@@ -333,7 +358,8 @@ class IstorayjeBot:
         if ty == 'text':
             return InlineQueryResultArticle(
                 id=data.msg_id,
-                title='> ' + ', '.join(tags) + ' (' + str(data['msg_id']) + ')',
+                title='> ' + ', '.join(tags) +
+                ' (' + str(data['msg_id']) + ')',
                 input_message_content=InputTextMessageContent(
                     data['text']
                 )
@@ -352,7 +378,8 @@ class IstorayjeBot:
             return InlineQueryResultCachedPhoto(
                 data['msg_id'],
                 data['file_id'],
-                title='> ' + ', '.join(tags) + ' (' + str(data['msg_id']) + ')',
+                title='> ' + ', '.join(tags) +
+                ' (' + str(data['msg_id']) + ')',
                 caption=data.get('caption', None)
             )
         elif ty == 'sticker':
@@ -390,7 +417,8 @@ class IstorayjeBot:
                 data = {
                     'file_id': document.file_id,
                     'chatid': chid,
-                    'msg_id': id
+                    'msg_id': id,
+                    'xxhash': xxhash.xxh64(self.updater.bot.get_file(file_id=document.file_id).download_as_bytearray()).digest()
                 }
                 if 'mp4' in mime:
                     data['type'] = 'mp4'
@@ -427,33 +455,37 @@ class IstorayjeBot:
 
             print(coll, query)
             colls = list((x['index']['id'], x['index']['tags']) for x in
-                self.db.db.storage.aggregate([
-                {'$match': {
-                    'user_id': update.inline_query.from_user.id
-                    }
-                },
-                {'$project': {
-                    "index": '$collection.' + coll + '.index',
-                    '_id': 0
-                    }
-                },
-                {'$unwind': '$index'},
-                {'$match': {
-                    'index.tags': {
-                        '$all': query
-                        }
-                    }
-                },
-                {'$limit': 5}
-            ]))
+                         self.db.db.storage.aggregate([
+                             {'$match': {
+                                 'user_id': update.inline_query.from_user.id
+                             }
+                             },
+                             {'$project': {
+                                 "index": '$collection.' + coll + '.index',
+                                 '_id': 0
+                             }
+                             },
+                             {'$unwind': '$index'},
+                             {'$match': {
+                                 'index.tags': {
+                                     '$all': query
+                                 }
+                             }
+                             },
+                             {'$limit': 5}
+                         ]))
             results = [InlineQueryResultArticle(
                 id=uuid4(),
-                title='>> ' + ' '.join(query or ['Your', 'Recent', 'Selections']),
+                title='>> ' +
+                ' '.join(query or ['Your', 'Recent', 'Selections']),
                 input_message_content=InputTextMessageContent(
-                    'Search for `' + ' '.join(query) + '\' and more~' if len(query) else 'Yes, these are your recents'
+                    'Search for `' +
+                    ' '.join(
+                        query) + '\' and more~' if len(query) else 'Yes, these are your recents'
                 )
             )]
-            userdata = self.db.db.storage.find_one({'user_id': update.inline_query.from_user.id})
+            userdata = self.db.db.storage.find_one(
+                {'user_id': update.inline_query.from_user.id})
             chatid = userdata['collection'][coll]['id']
             cachetime = 300
             if len(query) == 0:
@@ -468,12 +500,14 @@ class IstorayjeBot:
                 print('>>> || ', last_used, 'in', chatid)
                 for msgid in last_used:
                     msgid = int(msgid)
-                    cmsg = self.db.db.message_cache.find_one({ '$and':
-                        [{'chatid': chatid}, {'msg_id': msgid}]
-                    })
+                    cmsg = self.db.db.message_cache.find_one({'$and':
+                                                              [{'chatid': chatid}, {
+                                                                  'msg_id': msgid}]
+                                                              })
                     if not cmsg:
                         print('> id', msgid, 'not found...?')
-                    results.append(self.clone_messaage_with_data(cmsg, ['last', 'used']))
+                    results.append(self.clone_messaage_with_data(
+                        cmsg, ['last', 'used']))
             if len(results) > 1:
                 update.inline_query.answer(
                     results,
@@ -486,7 +520,8 @@ class IstorayjeBot:
                     InlineQueryResultArticle(
                         id=uuid4(),
                         title='no result matching query found',
-                        input_message_content=InputTextMessageContent(f'<imaginary result matching {" ".join(query)}>')
+                        input_message_content=InputTextMessageContent(
+                            f'<imaginary result matching {" ".join(query)}>')
                     )
                 )
                 cachetime = 60
@@ -498,7 +533,8 @@ class IstorayjeBot:
                     InlineQueryResultArticle(
                         id=uuid4(),
                         title='no temp set, "/temp <temp_chat_username>" in the bot chat',
-                        input_message_content=InputTextMessageContent('This user is actually dumb')
+                        input_message_content=InputTextMessageContent(
+                            'This user is actually dumb')
                     )
                 )
                 cachetime = 0
@@ -509,11 +545,13 @@ class IstorayjeBot:
             for col in colls:
                 try:
                     print(tempid, chatid, col)
-                    cmsg = self.db.db.message_cache.find_one({ '$and':
-                        [{'chatid': chatid}, {'msg_id': col[0]}]
-                    })
+                    cmsg = self.db.db.message_cache.find_one({'$and':
+                                                              [{'chatid': chatid}, {
+                                                                  'msg_id': col[0]}]
+                                                              })
                     if cmsg:
-                        cloned_message = self.clone_messaage_with_data(cmsg, col[1])
+                        cloned_message = self.clone_messaage_with_data(
+                            cmsg, col[1])
                     else:
                         msg = bot.forward_message(
                             chat_id=tempid,
@@ -522,9 +560,10 @@ class IstorayjeBot:
                             disable_notification=True,
                         )
                         print(msg)
-                        cloned_message = self.try_clone_message(msg, col[1], id=col[0], chid=chatid)
+                        cloned_message = self.try_clone_message(
+                            msg, col[1], id=col[0], chid=chatid)
                         msg.delete()
-                    
+
                     if not cloned_message:
                         continue
                     results.append(cloned_message)
@@ -532,9 +571,10 @@ class IstorayjeBot:
                     cachetime = 10
                     results.append(
                         InlineQueryResultArticle(
-                        id=uuid4(),
-                        title=f'Exception <{e}> occured while processing {col}',
-                        input_message_content=InputTextMessageContent(f'This bot is actually dumb\nException: {e}')
+                            id=uuid4(),
+                            title=f'Exception <{e}> occured while processing {col}',
+                            input_message_content=InputTextMessageContent(
+                                f'This bot is actually dumb\nException: {e}')
                         )
                     )
             update.inline_query.answer(
@@ -547,9 +587,10 @@ class IstorayjeBot:
             traceback.print_exc()
             update.inline_query.answer([
                 InlineQueryResultArticle(
-                        id=uuid4(),
-                        title=f'Exception <{e}> occured while processing {query} in {coll}',
-                        input_message_content=InputTextMessageContent(f'This bot is actually dumb\n{e}\nHint: you might be searching a nonexistent collection')
+                    id=uuid4(),
+                    title=f'Exception <{e}> occured while processing {query} in {coll}',
+                    input_message_content=InputTextMessageContent(
+                        f'This bot is actually dumb\n{e}\nHint: you might be searching a nonexistent collection')
                 )
             ], cache_time=10)
 
@@ -579,8 +620,8 @@ class IstorayjeBot:
             '$set': {
                 'temp': {
                     'id': username,
-                    },
-                }
+                },
+            }
         }, upsert=True)
 
         update.message.reply_text(
@@ -607,13 +648,13 @@ class IstorayjeBot:
                     'id': username,
                     'index': [],
                     'temp': []
-                    },
+                },
                 'last_used.' + context['option']: []
-                }
+            }
         }, upsert=True)
         try:
             self.db.db.cindex.update_one({}, {
-                '$addToSet': { 'index.' + username: update.message.from_user.id }
+                '$addToSet': {'index.' + username: update.message.from_user.id}
             }, upsert=True)
         except Exception as e:
             print(e)
@@ -660,11 +701,29 @@ class IstorayjeBot:
         msg.reply_text(
             '^add: newtag another-new-tag'
         )
-    
-    def reverse_search(self, bot, update):
+
+    def reverse_search(self, bot, update, fuzzy=False):
         update.message.reply_text(
             'Send the document/image/GIF (text will not be processed)'
         )
         ctx = self.context.get('do_reverse', [])
+        fz = self.context.get('fuzz_reverse', {})
         ctx.append(update.message.from_user.id)
         self.context['do_reverse'] = ctx
+        fz[update.message.from_user.id] = fuzzy
+        self.context['fuzz_reverse'] = fz
+    
+    def reverse_search_fuzzy(self, bot, update):
+        self.reverse_search(bot, update, fuzzy=True)
+
+    def rehash(self, bot, update):
+        index = list((x['_id'], x['file_id'])
+                     for x in self.db.db.message_hash.find() if hasattr(x, 'file_id'))
+        update.message.reply_text(f'found {len(index)} items, updating...')
+        mod = 0
+        for item in index:
+            h = xxhash.xxh64(self.updater.bot.get_file(
+                file_id=item[1]).download_as_bytearray()).digest()
+            mod += self.db.db.message_index.update_one(
+                {'_id': item[0]}, {'$set': {'xxhash': h}}).modified_count
+        update.message.reply_text(f'Rehash done, updated {mod} entries')
