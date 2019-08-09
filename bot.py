@@ -143,6 +143,7 @@ class IstorayjeBot:
                     )
                     mvalue = xxhash.xxh64(self.updater.bot.get_file(file_id=mvalue).download_as_bytearray()).digest()
                     mfield = 'xxhash'
+                print(f'going to look at {mfield} for {mvalue}')
                 wtf = list(self.db.db.message_cache.aggregate([
                     {'$match': {mfield: mvalue}},
                     {'$project': {'file_id': 0, 'type': 0}},
