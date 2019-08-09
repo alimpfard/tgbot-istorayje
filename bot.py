@@ -204,8 +204,8 @@ class IstorayjeBot:
                     traceback.print_exc()
                     pass
                 return
-            except:
-                pass
+        except:
+            pass
 
         # probably index update...or stray message
         try:
