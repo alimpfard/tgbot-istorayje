@@ -455,7 +455,12 @@ class IstorayjeBot:
             if not coll or coll == '':
                 return
 
-            print(coll, query)
+            print(coll, query            if any(x in coll for x in '$./[]'):
+                update.inline_query.answer(
+                    [InlineQueryResultArticle(id=uuid4(), title='Invalid collection name "' + coll + '"',
+                                              input_message_content=InputTextMessageContent('This user is an actual idiot'))]
+                )
+                return
             colls = list((x['index']['id'], x['index']['tags']) for x in
                          self.db.db.storage.aggregate([
                              {'$match': {
@@ -604,6 +609,10 @@ class IstorayjeBot:
                 'connect what? (repeat command with argument)')
             return
 
+        if any(x in txt for x in '$./[]'):
+            update.message.reply_text('Invalid collection name "' + coll + '"')
+            return
+        
         update.message.reply_text('setting option ' + txt)
         context = {}
         context['option'] = txt
