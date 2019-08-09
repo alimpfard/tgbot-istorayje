@@ -718,7 +718,7 @@ class IstorayjeBot:
 
     def rehash_all(self, bot, update):
         index = list((x['_id'], x['file_id'])
-                     for x in self.db.db.message_cache.find({}) if hasattr(x, 'file_id'))
+                     for x in self.db.db.message_cache.find({'file_id': {'$ne': None}}))
         update.message.reply_text(f'found {len(index)} items, updating...')
         mod = 0
         for item in index:
