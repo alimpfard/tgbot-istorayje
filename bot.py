@@ -304,13 +304,13 @@ class IstorayjeBot:
                     print('invalid response, null document')
                     continue
 
-                res = pke_tagify(list(
+                res = pke_tagify([
                     docv['filename'],
                     docv['anime'],
                     docv['title_english'],
                     docv['title_romaji'],
                     *docv['synonyms']
-                ))
+                ])
 
                 instags = [x[0] for x in res if x[1] >= doc['similarity_cap']]
                 
@@ -345,7 +345,6 @@ class IstorayjeBot:
                     chat_id=resp[1],
                     message_id=resp[0],
                 )
-                print('no tags', docv)
         
         if self.db.db.tag_updates.count_documents({}) == 0:
             self.updater.job_queue.run_once(self.process_insertions, timedelta(seconds=30)) # todo: based on load
