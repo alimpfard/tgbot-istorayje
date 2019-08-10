@@ -332,7 +332,7 @@ class IstorayjeBot:
                     print(ins)
                     self.db.db.storage.update_many(
                         {'user_id': {'$in': doc['users']}}, ins)
-                    resp = doc['response_id']
+                resp = doc['response_id']
                 self.updater.bot.edit_message_text(
                     f'Completed:\nadded tags: {insps}',
                     chat_id=resp[1],
