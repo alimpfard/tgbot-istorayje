@@ -663,7 +663,7 @@ class IstorayjeBot:
                     self.db.db.message_cache.insert_one(data)
                     return self.clone_messaage_with_data(data, tags)
                 except Exception as e:
-                    print('exception', e, 'while processing', data, 'with tags', tags)
+                    print('exception', e, 'while processing', message, 'with tags', tags)
                     return None
         return None
 
