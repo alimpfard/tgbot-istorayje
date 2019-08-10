@@ -634,7 +634,7 @@ class IstorayjeBot:
             return self.clone_messaage_with_data(data, tags)
         except:
             try:
-                document = get_any(message, ['animation', 'audio', 'video', 'photo'])
+                document = get_any(message, ['document', 'animation', 'audio', 'video', 'photo'])
                 assert (document is not None)
                 mime = None
                 if isinstance(document, list):
