@@ -26,6 +26,7 @@ from threading import Event
 from time import time
 from datetime import timedelta
 
+
 def get_any(obj, lst):
     for prop in lst:
         if hasattr(obj, prop):
@@ -45,17 +46,19 @@ class IstorayjeBot:
         self.updater.dispatcher.add_error_handler(self.error)
 
         if not self.restore_jobs():
-            self.updater.job_queue.run_repeating(self.save_jobs, timedelta(minutes=5))
-            self.updater.job_queue.run_repeating(self.process_insertions, timedelta(minutes=1))
+            self.updater.job_queue.run_repeating(
+                self.save_jobs, timedelta(minutes=5))
+            self.updater.job_queue.run_repeating(
+                self.process_insertions, timedelta(minutes=1))
 
         self.context = {}
-    
+
     def _dumpjobs(self, jq):
         if jq:
             job_tuples = jq._queue.queue
         else:
             job_tuples = []
-        
+
         res_bins = []
         for next_t, job in job_tuples:
             # Back up objects
@@ -75,12 +78,16 @@ class IstorayjeBot:
             job._job_queue = _job_queue
             job._remove = _remove
             job._enabled = _enabled
-        
+
         return res_bins
 
-    def save_jobs(self, context, *args, **kwargs):
-        self.db.db.jobs.find_one_and_replace({}, {'data': pickle.dumps(self._dumpjobs(context.job_queue))}, upsert=True)
-    
+    def save_jobs(self, *args, **kwargs):
+        self.db.db.jobs.find_one_and_replace(
+            {},
+            {'data': pickle.dumps(self._dumpjobs(self.updater.job_queue))},
+            upsert=True
+        )
+
     def restore_jobs(self):
         jq = self.updater.job_queue
         now = time()
@@ -110,9 +117,8 @@ class IstorayjeBot:
             next_t -= now  # Convert from absolute to relative time
 
             jq._put(job, next_t)
-        
-        return jobs is not None and len(jobs) > 0
 
+        return jobs is not None and len(jobs) > 0
 
     def error(self, bot, update, error):
         print(f'[Error] Update {update} caused error {error}')
@@ -201,9 +207,9 @@ class IstorayjeBot:
 
     def tagify_all(self, *tags):
         return list(filter(
-            self.is_useful_tag, 
+            self.is_useful_tag,
             sum(list(list(set([x.replace(' ', '_').lower()] + x.lower().split(' ') + list(re.sub('\\W', '', y.lower()) for y in x.split(' '))))
-                for x in tags if x), [])
+                     for x in tags if x), [])
         ))
 
     def process_insertions(self, *args, **kwargs):
@@ -235,21 +241,24 @@ class IstorayjeBot:
                     print('similarity cap hit')
                     continue
 
-                instags = self.tagify_all(docv['title_english'], docv['title_romaji'], *docv['synonyms'])
+                instags = self.tagify_all(
+                    docv['title_english'], docv['title_romaji'], *docv['synonyms'])
                 if docv['is_adult']:
                     instags.push('nsfw')
-            
+
             if len(instags):
                 insps = list((x[0], a['index']) for x in doc['insertion_paths'] for a in self.db.db.storage.aggregate([
                     {'$match': {'user_id': {'$in': doc['users']}}},
                     {'$project': {'index': f'$collection.{x[0]}.index'}},
-                    {'$unwind': { 'path': '$index', 'includeArrayIndex': 'idx' }},
+                    {'$unwind': {'path': '$index', 'includeArrayIndex': 'idx'}},
                     {'$match': {'index.id': x[1]}},
                     {'$project': {'index': '$idx'}}
                 ]))
-                ins = {'$addToSet': {f'collection.{p[0]}.index.{p[1]}.tags':{'$each': instags} for p in insps}}
+                ins = {'$addToSet': {f'collection.{p[0]}.index.{p[1]}.tags': {
+                    '$each': instags} for p in insps}}
                 print(ins)
-                self.db.db.storage.update_many({'user_id': {'$in': doc['users']}}, ins)
+                self.db.db.storage.update_many(
+                    {'user_id': {'$in': doc['users']}}, ins)
             else:
                 print('no tags', docv)
         return
@@ -269,30 +278,37 @@ class IstorayjeBot:
                 'users': users,
             }
             if tag in ['google', 'anime']:
-                doc = get_any(message, ['document'])
+                doc = get_any(message, ['document', 'sticker'])
                 if not doc:
                     print('doc is null', 'from', message)
                     return None
                 
-                if any(x in doc.mime_type for x in ['png', 'jpg', 'jpeg']):
-                    insert['filecontent'] = bytes(self.updater.bot.get_file(file_id=doc.file_id).download_as_bytearray())
-                
-                elif any(x in doc.mime_type for x in ['gif', 'mp4']):
-                    insert['filecontent'] = bytes(self.updater.bot.get_file(file_id=doc.thumb.file_id).download_as_bytearray())
-                    insert['similarity_cap'] = int(targs[0])/100 if len(targs) else 0.6
+                print('got doc', doc)
+
+                if any(x in doc.mime_type for x in ['gif', 'mp4']):
+                    insert['filecontent'] = bytes(self.updater.bot.get_file(
+                        file_id=doc.thumb.file_id).download_as_bytearray())
+                    insert['similarity_cap'] = int(
+                        targs[0])/100 if len(targs) else 0.6
+
+                elif 'image' in doc.mime_type:
+                    insert['filecontent'] = bytes(self.updater.bot.get_file(
+                        file_id=doc.file_id).download_as_bytearray())
+
                 else:
                     print(doc.mime_type, 'is not supported')
-                    return None # shrug
+                    return None  # shrug
 
                 insert['service'] = tag
             else:
                 return 'unsupported_magic:' + tag
-            
+
             if not insert['service']:
                 return None
             self.db.db.tag_updates.insert_one(insert)
             return None
         return tag
+
     def handle_possible_index_update(self, bot, update):
         print('<<<', update)
         reverse = self.context.get('do_reverse', [])
@@ -309,12 +325,14 @@ class IstorayjeBot:
                 # do a reverse document to tag search
                 try:
                     mfield = 'file_id'
-                    mvalue = get_any(update.message, ['document', 'sticker']).file_id
+                    mvalue = get_any(update.message, [
+                                     'document', 'sticker']).file_id
                     if fuzzy:
                         update.message.reply_text(
                             'Please wait, this might take a moment'
                         )
-                        mvalue = xxhash.xxh64(self.updater.bot.get_file(file_id=mvalue).download_as_bytearray()).digest()
+                        mvalue = xxhash.xxh64(self.updater.bot.get_file(
+                            file_id=mvalue).download_as_bytearray()).digest()
                         mfield = 'xxhash'
                     print(f'going to look at {mfield} for {mvalue}')
                     wtf = list(self.db.db.message_cache.aggregate([
@@ -449,10 +467,11 @@ class IstorayjeBot:
                         noreply = True
                     mtags = list(set(x for x in [
                         self.handle_magic_tags(
-                            early=noreply, 
-                            tag=x, 
-                            message=m_msg, 
-                            insertion_paths=[(coll, m_msgid) for coll in collections],
+                            early=noreply,
+                            tag=x,
+                            message=m_msg,
+                            insertion_paths=[(coll, m_msgid)
+                                             for coll in collections],
                             users=[user]
                         )
                         for x in mtags
@@ -623,7 +642,7 @@ class IstorayjeBot:
                     data['type'] = 'mp4'
                 elif 'gif' in mime:
                     data['type'] = 'gif'
-                elif any(x in mime for x in ['png', 'jpg', 'jpeg']):
+                elif 'image' in mime:
                     data['type'] = 'img'
                     data['caption'] = document.caption
                 else:
