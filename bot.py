@@ -612,6 +612,7 @@ class IstorayjeBot:
                 data['file_id']
             )
         else:
+            print('unhandled msg type', ty, 'for message', data)
             return None
 
     def try_clone_message(self, message, tags, id=None, chid=None):
@@ -661,7 +662,8 @@ class IstorayjeBot:
                     }
                     self.db.db.message_cache.insert_one(data)
                     return self.clone_messaage_with_data(data, tags)
-                except:
+                except Exception as e:
+                    print('exception', e, 'while processing', data, 'with tags', tags)
                     return None
         return None
 
@@ -774,21 +776,25 @@ class IstorayjeBot:
                                                                   'msg_id': col[0]}]
                                                               })
                     if cmsg:
+                        print('cache hit for message', msgid, ':', cmsg)
                         cloned_message = self.clone_messaage_with_data(
                             cmsg, col[1])
                     else:
+                        print('cache miss for message', msgid, 'trying to load it')
                         msg = bot.forward_message(
                             chat_id=tempid,
                             from_chat_id=chatid,
                             message_id=col[0],
                             disable_notification=True,
                         )
-                        print(msg)
                         cloned_message = self.try_clone_message(
                             msg, col[1], id=col[0], chid=chatid)
+                        print('message duplicated and cached:', msg)
+
                         msg.delete()
 
                     if not cloned_message:
+                        print('message clone failed for', msgid)
                         continue
                     results.append(cloned_message)
                 except Exception as e:
