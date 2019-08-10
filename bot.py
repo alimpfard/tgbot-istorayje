@@ -553,6 +553,7 @@ class IstorayjeBot:
                 tags = re.split(self.reg, text[8:].strip())
             elif tet.startswith('^tags?'):
                 query = True
+                users = [msg.from_user.id]
             
         except Exception:
             pass
@@ -570,6 +571,7 @@ class IstorayjeBot:
                                    ])
                                    )
                 print('>> collections:', collections)
+
                 if mtags:
                     m_msgid = None
                     noreply = False
@@ -652,6 +654,21 @@ class IstorayjeBot:
                             for coll in collections
                         }
                     }
+                elif query:
+                    res = sum(list(x['tags'] for x in self.db.db.storage.aggregate([
+                        {'$match': {'user_id': user}},
+                        {'$project': {'_id': 0, 'collection': {
+                            '$objectToArray': '$collection'
+                        }}},
+                        {'$unwind': '$collection'},
+                        {'$match': {'collection.v.id': username}},
+                        {'$project': {'collection.v.index': 1}},
+                        {'$unwind': '$collection.v.index'},
+                        {'$match': {'collection.v.index.id': msg.reply_to_message.message_id}},
+                        {'$project': {'tags': '$collection.v.index.tags'}}
+                    ])), [])
+                    msg.reply_text(f'tags: {' '.join(res)}')
+                    return
                 else:
                     updateop = {
                         '$addToSet': {
