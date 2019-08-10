@@ -385,7 +385,7 @@ class IstorayjeBot:
 
                 if any(x in mime for x in ['gif', 'mp4']):
                     if google:
-                        insert['fileid'] = doc.file_id
+                        insert['fileid'] = doc.thumb.file_id
                     else:
                         insert['filecontent'] = bytes(self.updater.bot.get_file(
                             file_id=doc.thumb.file_id).download_as_bytearray())
