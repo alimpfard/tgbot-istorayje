@@ -234,10 +234,14 @@ class IstorayjeBot:
                 print('google', doc)
                 details = searchGoogleImages(self.updater.bot.get_file(file_id=doc['fileid'])._get_encoded_url())
                 if not details:
+                    resp = doc['response_id']
+                    self.updater.bot.edit_message_text(chat_id=resp[1], message_id=resp[0], 'Failed: google query had no results')
                     continue
                 req = details['descriptions']
                 res = pke_tagify(req)
                 if not res:
+                    resp = doc['response_id']
+                    self.updater.bot.edit_message_text(chat_id=resp[1], message_id=resp[0], 'Failed: google query had no usable tags')
                     continue
                 instags = [x[0] for x in res if x[1] >= doc['similarity_cap']]
 
@@ -245,11 +249,15 @@ class IstorayjeBot:
 
                 details = getTraceAPIDetails(doc['filecontent'])
                 if not details:
+                    resp = doc['response_id']
+                    self.updater.bot.edit_message_text(chat_id=resp[1], message_id=resp[0], 'Rejected: anime query had no results')
                     print('no response')
                     continue
 
                 docv = details['docs']
                 if len(docv) < 1:
+                    resp = doc['response_id']
+                    self.updater.bot.edit_message_text(chat_id=resp[1], message_id=resp[0], 'Failed: anime query had no results')
                     print('no results')
                     continue
 
@@ -258,10 +266,14 @@ class IstorayjeBot:
                 try:
                     docv = next(sorted(filter(lambda x: x['similarity'] < doc['similarity_cap'], docv), key=lambda x: x['similarity'], reverse=True))
                 except:
+                    resp = doc['response_id']
+                    self.updater.bot.edit_message_text(chat_id=resp[1], message_id=resp[0], f'Completed: anime query results below set similarity ({doc['similarity_cap']})')
                     print('similarity cap hit')
                     continue
 
                 if not docv:
+                    resp = doc['response_id']
+                    self.updater.bot.edit_message_text(chat_id=resp[1], message_id=resp[0], 'Failed: unknown reason')
                     print('invalid response, null document')
                     continue
 
@@ -291,7 +303,11 @@ class IstorayjeBot:
                 print(ins)
                 self.db.db.storage.update_many(
                     {'user_id': {'$in': doc['users']}}, ins)
+                resp = doc['response_id']
+                self.updater.bot.edit_message_text(chat_id=resp[1], message_id=resp[0], f'Completed:\nadded tags: {insps}')
             else:
+                resp = doc['response_id']
+                self.updater.bot.edit_message_text(chat_id=resp[1], message_id=resp[0], 'Completed: query had no results')
                 print('no tags', docv)
         
         if self.db.db.tag_updates.count_documents({}) == 0:
@@ -357,6 +373,7 @@ class IstorayjeBot:
                 return None
 
             rmm = message.reply_text(f'will process {tag} and edit this message with the result in a bit.')
+            insert['response_id'] = [rmm.message_id, rmm.chat_id]
             self.db.db.tag_updates.insert_one(insert)
             return None
         return tag
