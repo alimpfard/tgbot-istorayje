@@ -52,7 +52,7 @@ class IstorayjeBot:
         if not self.restore_jobs():
             self.updater.job_queue.run_repeating(
                 self.save_jobs, timedelta(minutes=5))
-            self.updater.job_queue.run_repeating(
+            self.updater.job_queue.run_once( # it will re-add itself based on load
                 self.process_insertions, timedelta(minutes=3))
 
         self.context = {}
@@ -218,8 +218,11 @@ class IstorayjeBot:
                      for x in tags if x), [])
         ))
 
-    def process_insertions(self, *args, **kwargs):
+    def process_insertions(self, timeout=150, *args, **kwargs):
+        stime = time()
         while True:
+            if time() - stime >= timeout:
+                break
             doc = self.db.db.tag_updates.find_one_and_delete({})
             if not doc:
                 print('no more insertion')
@@ -274,7 +277,8 @@ class IstorayjeBot:
                     {'user_id': {'$in': doc['users']}}, ins)
             else:
                 print('no tags', docv)
-        return
+        
+        self.updater.job_queue.run_once(self.process_insertions, timedelta(minutes=3)) # todo: based on load
 
     def handle_magic_tags(self, tag: str, message: object, insertion_paths: list, early: bool, users: list):
         if tag.startswith('$'):
