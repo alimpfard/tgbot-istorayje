@@ -635,8 +635,9 @@ class IstorayjeBot:
                 document = get_any(message, ['animation', 'photo', 'audio', 'video'])
                 assert (document is not None)
                 if isinstance(document, list):
-                    assert (len(document) > 0)
                     # photo list, we're gonna take a random one for fun
+                    print (document)
+                    assert (len(document) > 0)
                     document = self.random.choice(document)
                 print('> is some sort of document')
                 mime = document.mime_type
