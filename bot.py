@@ -24,6 +24,7 @@ import xxhash
 import pickle
 from threading import Event
 from time import time
+import random
 from datetime import timedelta
 
 
@@ -38,6 +39,7 @@ def get_any(obj, lst):
 
 class IstorayjeBot:
     def __init__(self, token, db: DB):
+        self.random = random.Random()
         self.token = token
         self.updater = Updater(token)
         self.db = db
@@ -632,6 +634,10 @@ class IstorayjeBot:
             try:
                 document = get_any(message, ['animation', 'photo', 'audio', 'video'])
                 assert (document is not None)
+                if isinstance(document, list):
+                    assert (len(document) > 0)
+                    # photo list, we're gonna take a random one for fun
+                    document = self.random.choice(document)
                 print('> is some sort of document')
                 mime = document.mime_type
                 data = {
