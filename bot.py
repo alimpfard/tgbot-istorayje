@@ -52,7 +52,7 @@ class IstorayjeBot:
         if not self.restore_jobs():
             self.updater.job_queue.run_repeating(
                 self.save_jobs, timedelta(minutes=5))
-            self.updater.job_queue.run_once( # it will re-add itself based on load
+            self.updater.job_queue.run_repeating( # it will re-add itself based on load if more is required
                 self.process_insertions, timedelta(minutes=3))
 
         self.context = {}
@@ -265,7 +265,12 @@ class IstorayjeBot:
                     continue
 
                 res = pke_tagify(list(
-                    docv['title_english'], docv['title_romaji'], *docv['synonyms']))
+                    docv['filename'],
+                    docv['anime'],
+                    docv['title_english'],
+                    docv['title_romaji'],
+                    *docv['synonyms']
+                ))
 
                 instags = [x[0] for x in res if x[1] >= doc['similarity_cap']]
                 
@@ -288,7 +293,8 @@ class IstorayjeBot:
             else:
                 print('no tags', docv)
         
-        self.updater.job_queue.run_once(self.process_insertions, timedelta(minutes=3)) # todo: based on load
+        if self.db.db.tag_updates.count_documents({}) == 0:
+            self.updater.job_queue.run_once(self.process_insertions, timedelta(seconds=30)) # todo: based on load
 
     def handle_magic_tags(self, tag: str, message: object, insertion_paths: list, early: bool, users: list):
         if tag.startswith('$'):
