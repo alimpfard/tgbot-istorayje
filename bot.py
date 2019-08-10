@@ -226,7 +226,6 @@ class IstorayjeBot:
                 break
             doc = self.db.db.tag_updates.find_one_and_delete({})
             if not doc:
-                print('no more insertion')
                 break
             instags = []
 
@@ -286,7 +285,7 @@ class IstorayjeBot:
                     self.updater.bot.edit_message_text(
                         f'Completed: anime query results below set similarity ({doc["similarity_cap"]})',
                         chat_id=resp[1],
-                        message_id=resp[0], 
+                        message_id=resp[0],
                     )
                     print('similarity cap hit, just use first')
                     continue
@@ -313,7 +312,7 @@ class IstorayjeBot:
                 ])
 
                 instags = [x[0] for x in res if x[1] >= doc['similarity_cap']]
-                
+
                 if docv['is_adult']:
                     instags.push('nsfw')
 
@@ -346,8 +345,8 @@ class IstorayjeBot:
                     chat_id=resp[1],
                     message_id=resp[0],
                 )
-        
-        if self.db.db.tag_updates.count_documents({}) == 0:
+
+        if self.db.db.tag_updates.count_documents({}) != 0:
             self.updater.job_queue.run_once(self.process_insertions, timedelta(seconds=30)) # todo: based on load
 
     def handle_magic_tags(self, tag: str, message: object, insertion_paths: list, early: bool, users: list):
@@ -366,7 +365,7 @@ class IstorayjeBot:
             }
             if tag in ['google', 'anime']:
                 doc = get_any(message, ['document', 'sticker', 'photo'])
-                mime = None 
+                mime = None
                 if isinstance(doc, list):
                     doc = self.random.choice(doc)
                     mime = 'image'
@@ -555,7 +554,7 @@ class IstorayjeBot:
             elif text.startswith('^tags?'):
                 query = True
                 users = [msg.from_user.id]
-            
+
         except Exception:
             pass
         for user in users:
