@@ -277,8 +277,6 @@ class IstorayjeBot:
                     print('no results')
                     continue
 
-                docv = None
-
                 try:
                     docv = next(sorted(filter(lambda x: x['similarity'] < doc['similarity_cap'], docv), key=lambda x: x['similarity'], reverse=True))
                 except StopIteration:
