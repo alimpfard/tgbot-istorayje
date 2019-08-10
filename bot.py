@@ -326,12 +326,13 @@ class IstorayjeBot:
                     {'$project': {'index': '$idx'}}
                 ]))
                 print(insps)
-                ins = {'$addToSet': {f'collection.{p[0]}.index.{p[1]}.tags': {
-                    '$each': instags} for p in insps}}
-                print(ins)
-                self.db.db.storage.update_many(
-                    {'user_id': {'$in': doc['users']}}, ins)
-                resp = doc['response_id']
+                if len(insps):
+                    ins = {'$addToSet': {f'collection.{p[0]}.index.{p[1]}.tags': {
+                        '$each': instags} for p in insps}}
+                    print(ins)
+                    self.db.db.storage.update_many(
+                        {'user_id': {'$in': doc['users']}}, ins)
+                    resp = doc['response_id']
                 self.updater.bot.edit_message_text(
                     f'Completed:\nadded tags: {insps}',
                     chat_id=resp[1],
