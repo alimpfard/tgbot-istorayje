@@ -8,7 +8,9 @@ SEARCH_URL = 'https://www.google.com/searchbyimage?hl=en-US&image_url='
 
 def searchGoogleImages(image_url):
     code = doImageSearch(SEARCH_URL + image_url)
-    return parseResults(code)
+    res = parseResults(code)
+    print(res)
+    return res
 
 def doImageSearch(full_url):
     # Directly passing full_url
