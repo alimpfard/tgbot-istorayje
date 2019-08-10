@@ -632,6 +632,7 @@ class IstorayjeBot:
             try:
                 document = message.document
                 assert (document is not None)
+                print('> is some sort of document')
                 mime = document.mime_type
                 data = {
                     'file_id': document.file_id,
@@ -654,6 +655,7 @@ class IstorayjeBot:
                 try:
                     sticker = message.sticker
                     assert (sticker is not None)
+                    print('> is a sticker')
                     data = {
                         'type': 'sticker',
                         'file_id': sticker.file_id,
@@ -663,7 +665,8 @@ class IstorayjeBot:
                     self.db.db.message_cache.insert_one(data)
                     return self.clone_messaage_with_data(data, tags)
                 except Exception as e:
-                    print('exception', e, 'while processing', message, 'with tags', tags)
+                    traceback.print_exc()
+                    print('exception occured while processing', message, 'with tags', tags)
                     return None
         return None
 
@@ -789,7 +792,7 @@ class IstorayjeBot:
                         )
                         cloned_message = self.try_clone_message(
                             msg, col[1], id=col[0], chid=chatid)
-                        print('message duplicated and cached:', msg)
+                        print('duplicated message found:', msg)
 
                         msg.delete()
 
