@@ -281,7 +281,7 @@ class IstorayjeBot:
 
                 try:
                     docv = next(sorted(filter(lambda x: x['similarity'] < doc['similarity_cap'], docv), key=lambda x: x['similarity'], reverse=True))
-                except:
+                except StopIteration:
                     resp = doc['response_id']
                     self.updater.bot.edit_message_text(
                         f'Completed: anime query results below set similarity ({doc["similarity_cap"]})',
@@ -289,6 +289,9 @@ class IstorayjeBot:
                         message_id=resp[0], 
                     )
                     print('similarity cap hit')
+                    continue
+                except:
+                    traceback.print_exc()
                     continue
 
                 if not docv:
