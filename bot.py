@@ -279,7 +279,7 @@ class IstorayjeBot:
                 doclist = []
                 try:
                     # what the fuck?
-                    doclist = sorted(filter(lambda x: x['similarity'] >= 100*doc['similarity_cap'], docv), key=lambda x: x['similarity'], reverse=True)
+                    doclist = sorted(filter(lambda x: x['similarity'] >= doc['similarity_cap'], docv), key=lambda x: x['similarity'], reverse=True)
                     docv = next(iter(doclist))
                 except StopIteration:
                     resp = doc['response_id']
@@ -288,7 +288,7 @@ class IstorayjeBot:
                         chat_id=resp[1],
                         message_id=resp[0], 
                     )
-                    print('similarity cap hit')
+                    print('similarity cap hit, just use first')
                     continue
                 except:
                     traceback.print_exc()
