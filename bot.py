@@ -72,6 +72,8 @@ class IstorayjeBot:
             job._job_queue = None  # Will be reset in jq.put
             job._remove = job.removed  # Convert to boolean
             job._enabled = job.enabled  # Convert to boolean
+            
+            print({n:getattr(job, n) for n in dir(job)})
 
             # Pickle the job
             res_bins.append(pickle.dumps((next_t, job)))
@@ -634,13 +636,16 @@ class IstorayjeBot:
             try:
                 document = get_any(message, ['animation', 'photo', 'audio', 'video'])
                 assert (document is not None)
+                mime = None
                 if isinstance(document, list):
                     # photo list, we're gonna take a random one for fun
                     print (document)
                     assert (len(document) > 0)
                     document = self.random.choice(document)
+                    mime = 'image'
                 print('> is some sort of document')
-                mime = document.mime_type
+                if not mime:
+                    mime = document.mime_type
                 data = {
                     'file_id': document.file_id,
                     'chatid': chid,
