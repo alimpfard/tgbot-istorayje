@@ -276,10 +276,11 @@ class IstorayjeBot:
                     )
                     print('no results')
                     continue
-
+                doclist = []
                 try:
                     # what the fuck?
-                    docv = next(iter(sorted(filter(lambda x: x['similarity'] < 100*doc['similarity_cap'], docv), key=lambda x: x['similarity'], reverse=True)))
+                    doclist = sorted(filter(lambda x: x['similarity'] >= 100*doc['similarity_cap'], docv), key=lambda x: x['similarity'], reverse=True)
+                    docv = next(iter(doclist))
                 except StopIteration:
                     resp = doc['response_id']
                     self.updater.bot.edit_message_text(
