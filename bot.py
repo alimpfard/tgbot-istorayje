@@ -278,7 +278,8 @@ class IstorayjeBot:
                     continue
 
                 try:
-                    docv = next(sorted(filter(lambda x: x['similarity'] < doc['similarity_cap'], docv), key=lambda x: x['similarity'], reverse=True))
+                    # what the fuck?
+                    docv = next(iter(sorted(filter(lambda x: x['similarity'] < doc['similarity_cap'], docv), key=lambda x: x['similarity'], reverse=True)))
                 except StopIteration:
                     resp = doc['response_id']
                     self.updater.bot.edit_message_text(
