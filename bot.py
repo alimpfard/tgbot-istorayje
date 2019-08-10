@@ -579,7 +579,7 @@ class IstorayjeBot:
         ty = data['type']
         if ty == 'text':
             return InlineQueryResultArticle(
-                id=data.msg_id,
+                id=data['msg_id'],
                 title='> ' + ', '.join(tags) +
                 ' (' + str(data['msg_id']) + ')',
                 input_message_content=InputTextMessageContent(
