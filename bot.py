@@ -551,7 +551,7 @@ class IstorayjeBot:
             elif text.startswith('^remove:'):
                 remove = True
                 tags = re.split(self.reg, text[8:].strip())
-            elif tet.startswith('^tags?'):
+            elif txet.startswith('^tags?'):
                 query = True
                 users = [msg.from_user.id]
             
