@@ -776,11 +776,11 @@ class IstorayjeBot:
                                                                   'msg_id': col[0]}]
                                                               })
                     if cmsg:
-                        print('cache hit for message', msgid, ':', cmsg)
+                        print('cache hit for message', col[0], ':', cmsg)
                         cloned_message = self.clone_messaage_with_data(
                             cmsg, col[1])
                     else:
-                        print('cache miss for message', msgid, 'trying to load it')
+                        print('cache miss for message', col[0], 'trying to load it')
                         msg = bot.forward_message(
                             chat_id=tempid,
                             from_chat_id=chatid,
@@ -794,7 +794,7 @@ class IstorayjeBot:
                         msg.delete()
 
                     if not cloned_message:
-                        print('message clone failed for', msgid)
+                        print('message clone failed for', col[0])
                         continue
                     results.append(cloned_message)
                 except Exception as e:
