@@ -7,11 +7,13 @@ from telegram import (
     InlineQueryResultArticle, ParseMode,
     InputTextMessageContent,
     InlineQueryResultCachedDocument, InlineQueryResultCachedPhoto, InlineQueryResultCachedGif,
-    InlineQueryResultCachedMpeg4Gif, InlineQueryResultCachedSticker
+    InlineQueryResultCachedMpeg4Gif, InlineQueryResultCachedSticker, Sticker
 )
 from telegram.ext import ChosenInlineResultHandler
-from googlecloud import getCloudAPIDetails
+# from googlecloud import getCloudAPIDetails
+from googleimgsearch import searchGoogleImages
 from trace import getTraceAPIDetails
+from extern import pke_tagify
 
 from db import DB
 import re
@@ -51,7 +53,7 @@ class IstorayjeBot:
             self.updater.job_queue.run_repeating(
                 self.save_jobs, timedelta(minutes=5))
             self.updater.job_queue.run_repeating(
-                self.process_insertions, timedelta(minutes=1))
+                self.process_insertions, timedelta(seconds=10))
 
         self.context = {}
 
@@ -70,10 +72,10 @@ class IstorayjeBot:
 
             # Replace un-pickleable threading primitives
             job._job_queue = None  # Will be reset in jq.put
-            job._remove = job.removed  # Convert to boolean
-            job._enabled = job.enabled  # Convert to boolean
-
-            print({n:getattr(job, n) for n in dir(job)})
+            removed = job.removed  # Convert to boolean
+            enabled = job.enabled  # Convert to boolean
+            job._enabled = enabled
+            job._remove = removed
 
             # Pickle the job
             res_bins.append(pickle.dumps((next_t, job)))
@@ -220,13 +222,20 @@ class IstorayjeBot:
         while True:
             doc = self.db.db.tag_updates.find_one_and_delete({})
             if not doc:
+                print('no more insertion')
                 break
             instags = []
 
             if doc['service'] == 'google':
                 print('google', doc)
-                details = getCloudAPIDetails(doc['filecontent'])
-                print(details)
+                details = searchGoogleImages(self.updater.bot.get_file(file_id=doc['fileid'])._get_encoded_url())
+                if not details:
+                    continue
+                req = details['descriptions']
+                res = pke_tagify(req)
+                if not res:
+                    continue
+                instags = [x[0] for x in res if x[1] >= doc['similarity_cap']]
 
             elif doc['service'] == 'anime':
 
@@ -282,25 +291,41 @@ class IstorayjeBot:
                 'users': users,
             }
             if tag in ['google', 'anime']:
-                doc = get_any(message, ['document', 'sticker'])
+                doc = get_any(message, ['document', 'sticker', 'photo'])
+                mime = None 
+                if isinstance(doc, list):
+                    doc = self.random.choice(doc)
+                    mime = 'image'
+                if isinstance(doc, Sticker):
+                    mime = 'image'
+
                 if not doc:
                     print('doc is null', 'from', message)
                     return None
-                
+                if not mime:
+                    mime = doc.mime_type
                 print('got doc', doc)
 
-                if any(x in doc.mime_type for x in ['gif', 'mp4']):
-                    insert['filecontent'] = bytes(self.updater.bot.get_file(
-                        file_id=doc.thumb.file_id).download_as_bytearray())
-                    insert['similarity_cap'] = int(
-                        targs[0])/100 if len(targs) else 0.6
+                google = tag == 'google'
+                insert['similarity_cap'] = int(
+                    targs[0])/100 if len(targs) else 0.6
 
-                elif 'image' in doc.mime_type:
-                    insert['filecontent'] = bytes(self.updater.bot.get_file(
-                        file_id=doc.file_id).download_as_bytearray())
+                if any(x in mime for x in ['gif', 'mp4']):
+                    if google:
+                        insert['fileid'] = doc.file_id
+                    else:
+                        insert['filecontent'] = bytes(self.updater.bot.get_file(
+                            file_id=doc.thumb.file_id).download_as_bytearray())
+
+                elif 'image' in mime:
+                    if google:
+                        insert['fileid'] = doc.file_id
+                    else:
+                        insert['filecontent'] = bytes(self.updater.bot.get_file(
+                            file_id=doc.file_id).download_as_bytearray())
 
                 else:
-                    print(doc.mime_type, 'is not supported')
+                    print(mime, 'is not supported')
                     return None  # shrug
 
                 insert['service'] = tag

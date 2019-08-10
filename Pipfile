@@ -13,6 +13,8 @@ pymongo = "*"
 dnspython = "*"
 xxhash = "*"
 requests = "*"
+pycurl = "*"
+beautifulsoup4 = "*"
 
 [requires]
 python_version = "3.7"
