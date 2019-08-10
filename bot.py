@@ -53,7 +53,7 @@ class IstorayjeBot:
             self.updater.job_queue.run_repeating(
                 self.save_jobs, timedelta(minutes=5))
             self.updater.job_queue.run_repeating(
-                self.process_insertions, timedelta(seconds=10))
+                self.process_insertions, timedelta(minutes=3))
 
         self.context = {}
 
