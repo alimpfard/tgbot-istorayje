@@ -331,8 +331,10 @@ class IstorayjeBot:
                     mfield = 'file_id'
                     mvalue = get_any(update.message, [
                                      'document', 'sticker', 'animation', 'audio', 'video', 'photo'])
+                    assert (mvalue is not None)
                     if isinstance(mvalue, list):
                         mvalue = self.random.choice(mvalue)
+                    print('found item', mvalue)
                     mvalue = mvalue.file_id
                     if fuzzy:
                         update.message.reply_text(
@@ -742,7 +744,7 @@ class IstorayjeBot:
                     'collection': 0,
                 })['last_used']
                 print('>>>', last_used)
-                last_used = last_used[coll]
+                last_used = last_used.get(coll, [])
                 print('>>> || ', last_used, 'in', chatid)
                 for msgid in last_used:
                     msgid = int(msgid)
