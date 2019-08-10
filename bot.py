@@ -667,7 +667,7 @@ class IstorayjeBot:
                         {'$match': {'collection.v.index.id': msg.reply_to_message.message_id}},
                         {'$project': {'tags': '$collection.v.index.tags'}}
                     ])), [])
-                    msg.reply_text(f'tags: {' '.join(res)}')
+                    msg.reply_text(f'tags: {" ".join(res)}')
                     return
                 else:
                     updateop = {
