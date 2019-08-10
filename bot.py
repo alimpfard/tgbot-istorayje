@@ -50,10 +50,11 @@ class IstorayjeBot:
         self.updater.dispatcher.add_error_handler(self.error)
 
         if not self.restore_jobs():
-            self.updater.job_queue.run_repeating(
-                self.save_jobs, timedelta(minutes=5))
+            # TODO: fix save_jobs fucking up
+            # self.updater.job_queue.run_repeating(
+                # self.save_jobs, timedelta(minutes=5))
             self.updater.job_queue.run_repeating( # it will re-add itself based on load if more is required
-                self.process_insertions, timedelta(minutes=3))
+                self.process_insertions, timedelta(minutes=1))
 
         self.context = {}
 
@@ -354,6 +355,8 @@ class IstorayjeBot:
 
             if not insert['service']:
                 return None
+
+            rmm = message.reply_text(f'will process {tag} and edit this message with the result in a bit.')
             self.db.db.tag_updates.insert_one(insert)
             return None
         return tag
