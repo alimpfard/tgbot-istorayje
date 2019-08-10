@@ -318,6 +318,7 @@ class IstorayjeBot:
                     instags.push('nsfw')
 
             if len(instags):
+                instags = [tag.replace(' ', '_') for tag in instags]
                 insps = list((x[0], a['index']) for x in doc['insertion_paths'] for a in self.db.db.storage.aggregate([
                     {'$match': {'user_id': {'$in': doc['users']}}},
                     {'$project': {'index': f'$collection.{x[0]}.index'}},
@@ -334,7 +335,7 @@ class IstorayjeBot:
                         {'user_id': {'$in': doc['users']}}, ins)
                 resp = doc['response_id']
                 self.updater.bot.edit_message_text(
-                    f'Completed:\nadded tags: {insps}',
+                    f'Completed:\nadded tags: {" ".join(instags)}',
                     chat_id=resp[1],
                     message_id=resp[0],
                 )
@@ -551,7 +552,7 @@ class IstorayjeBot:
             elif text.startswith('^remove:'):
                 remove = True
                 tags = re.split(self.reg, text[8:].strip())
-            elif txet.startswith('^tags?'):
+            elif text.startswith('^tags?'):
                 query = True
                 users = [msg.from_user.id]
             
