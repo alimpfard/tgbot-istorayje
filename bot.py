@@ -251,7 +251,7 @@ class IstorayjeBot:
                         message_id=resp[0],
                     )
                     continue
-                instags = [x[0] for x in res if x[1] >= doc['similarity_cap']]
+                instags = [x[0] for x in res if x[1] >= 100*doc['similarity_cap']]
 
             elif doc['service'] == 'anime':
 
@@ -279,7 +279,7 @@ class IstorayjeBot:
 
                 try:
                     # what the fuck?
-                    docv = next(iter(sorted(filter(lambda x: x['similarity'] < doc['similarity_cap'], docv), key=lambda x: x['similarity'], reverse=True)))
+                    docv = next(iter(sorted(filter(lambda x: x['similarity'] < 100*doc['similarity_cap'], docv), key=lambda x: x['similarity'], reverse=True)))
                 except StopIteration:
                     resp = doc['response_id']
                     self.updater.bot.edit_message_text(
