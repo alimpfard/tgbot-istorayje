@@ -325,6 +325,7 @@ class IstorayjeBot:
                     {'$match': {'index.id': x[1]}},
                     {'$project': {'index': '$idx'}}
                 ]))
+                print(insps)
                 ins = {'$addToSet': {f'collection.{p[0]}.index.{p[1]}.tags': {
                     '$each': instags} for p in insps}}
                 print(ins)
@@ -532,6 +533,7 @@ class IstorayjeBot:
         add = False
         reset = False
         remove = False
+        query = False
 
         try:
             text = msg.text
@@ -549,6 +551,9 @@ class IstorayjeBot:
             elif text.startswith('^remove:'):
                 remove = True
                 tags = re.split(self.reg, text[8:].strip())
+            elif tet.startswith('^tags?'):
+                query = True
+            
         except Exception:
             pass
         for user in users:
