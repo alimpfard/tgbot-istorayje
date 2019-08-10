@@ -184,7 +184,7 @@ class IstorayjeBot:
                 'used_count': 1
             }
         }, return_document=True)
-        last_used = doc['last_used'][coll]
+        last_used = doc['last_used'].get(coll, [])
         if result_id in last_used:
             return
         print(f"> {user}'s last_used: {last_used}")
