@@ -72,7 +72,7 @@ class IstorayjeBot:
             job._job_queue = None  # Will be reset in jq.put
             job._remove = job.removed  # Convert to boolean
             job._enabled = job.enabled  # Convert to boolean
-            
+
             print({n:getattr(job, n) for n in dir(job)})
 
             # Pickle the job
@@ -644,6 +644,7 @@ class IstorayjeBot:
                     document = self.random.choice(document)
                     mime = 'image'
                 print('> is some sort of document')
+                caption = message.caption
                 if not mime:
                     mime = document.mime_type
                 data = {
@@ -658,9 +659,10 @@ class IstorayjeBot:
                     data['type'] = 'gif'
                 elif 'image' in mime:
                     data['type'] = 'img'
-                    data['caption'] = document.caption
+                    data['caption'] = caption
                 else:
                     data['type'] = 'doc'
+                    data['caption'] = caption
                 self.db.db.message_cache.insert_one(data)
                 return self.clone_messaage_with_data(data, tags)
             except:
