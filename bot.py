@@ -630,7 +630,7 @@ class IstorayjeBot:
             return self.clone_messaage_with_data(data, tags)
         except:
             try:
-                document = message.document
+                document = get_any(message, ['animation', 'photo', 'audio', 'video'])
                 assert (document is not None)
                 print('> is some sort of document')
                 mime = document.mime_type
