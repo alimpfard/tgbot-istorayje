@@ -218,7 +218,7 @@ class IstorayjeBot:
                      for x in tags if x), [])
         ))
 
-    def process_insertions(self, timeout=150, *args, **kwargs):
+    def process_insertions(self, *args, timeout=150, **kwargs):
         stime = time()
         while True:
             if time() - stime >= timeout:
