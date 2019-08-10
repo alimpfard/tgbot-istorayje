@@ -252,13 +252,23 @@ class IstorayjeBot:
                     print('no results')
                     continue
 
-                docv = docv[0]
-                if docv['similarity'] < doc['similarity_cap']:
+                docv = None
+
+                try:
+                    docv = next(sorted(filter(lambda x: x['similarity'] < doc['similarity_cap'], docv), key=lambda x: x['similarity'], reverse=True))
+                except:
                     print('similarity cap hit')
                     continue
 
-                instags = self.tagify_all(
-                    docv['title_english'], docv['title_romaji'], *docv['synonyms'])
+                if not docv:
+                    print('invalid response, null document')
+                    continue
+
+                res = pke_tagify(list(
+                    docv['title_english'], docv['title_romaji'], *docv['synonyms']))
+
+                instags = [x[0] for x in res if x[1] >= doc['similarity_cap']]
+                
                 if docv['is_adult']:
                     instags.push('nsfw')
 
