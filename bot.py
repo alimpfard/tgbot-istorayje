@@ -330,7 +330,10 @@ class IstorayjeBot:
                 try:
                     mfield = 'file_id'
                     mvalue = get_any(update.message, [
-                                     'document', 'sticker']).file_id
+                                     'document', 'sticker', 'animation', 'audio', 'video', 'photo'])
+                    if isinstance(mvalue, list):
+                        mvalue = self.random.choice(mvalue)
+                    mvalue = mvalue.file_id
                     if fuzzy:
                         update.message.reply_text(
                             'Please wait, this might take a moment'
