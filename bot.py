@@ -28,8 +28,6 @@ from threading import Event
 from time import time
 import random
 from datetime import timedelta
-import hashlib
-import png
 
 
 def get_any(obj, lst):
@@ -242,7 +240,7 @@ class IstorayjeBot:
                         message_id=resp[0],
                     )
                     continue
-                req = details['descriptions']
+                req = details['descriptions'] + ([details['best_guess']] * 4 if details['best_guess'] != '' else [])
                 res = pke_tagify(req)
                 if not res:
                     resp = doc['response_id']
@@ -314,10 +312,13 @@ class IstorayjeBot:
                 ])
 
                 instags = [x[0] for x in res if x[1] >= doc['similarity_cap']]
+                instags = instags + docv['synonyms']
 
                 if docv['is_adult']:
                     instags.push('nsfw')
 
+            instags = list(set(instags))
+            
             if len(instags):
                 instags = [tag.replace(' ', '_') for tag in instags]
                 insps = list((x[0], a['index']) for x in doc['insertion_paths'] for a in self.db.db.storage.aggregate([
