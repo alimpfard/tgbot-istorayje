@@ -24,7 +24,7 @@ import traceback
 import json
 import xxhash
 import pickle
-from threading import Event
+from threading import Event, get_ident
 from time import time
 import random
 from datetime import timedelta
@@ -318,7 +318,7 @@ class IstorayjeBot:
                     instags.push('nsfw')
 
             instags = list(set(instags))
-            
+
             if len(instags):
                 instags = [tag.replace(' ', '_') for tag in instags]
                 insps = list((x[0], a['index']) for x in doc['insertion_paths'] for a in self.db.db.storage.aggregate([
@@ -353,10 +353,11 @@ class IstorayjeBot:
             self.updater.job_queue.run_once(self.process_insertions, timedelta(seconds=30)) # todo: based on load
 
     def handle_magic_tags(self, tag: str, message: object, insertion_paths: list, early: bool, users: list):
+        tag, targs = tag
         if tag.startswith('$'):
             if early:
                 return None
-            tag, *targs = tag[1:].split(':')
+            tag = tag[1:]
             print('magic tag', tag, 'with args', targs)
             insert = {
                 'service': '',
@@ -421,8 +422,19 @@ class IstorayjeBot:
                     return None  # shrug
 
                 insert['service'] = tag
+            elif tag in ['caption', 'default_caption', 'defcap', 'defcaption', 'cap']:
+                if len(targs) > 1:
+                    return 'magic::$caption::requires(one or zero arguments)'
+                def handle(collections, message, bot, arg):
+                    return {
+                        '$set': {
+                            f'collection.{coll}.index.$.caption': arg if arg else None # clear
+                            for coll in collections
+                        }
+                    }
+                return InstantMagicTag('caption', argument=targs[0], handler=handle, can_handle=['add'])
             else:
-                return 'unsupported_magic:' + tag
+                return 'unsupported_magic::$' + tag
 
             if not insert['service']:
                 return None
@@ -433,6 +445,65 @@ class IstorayjeBot:
             self.db.db.tag_updates.insert_one(insert)
             return None
         return tag
+    
+    def parse_insertion_statement(self, stmt: str, rev={'(': ')', ')': '(', '{': '}', '}': '{', '<': '>', '>': '<'}):
+        tags = []
+        stmt = stmt.strip() + ' '
+        open_paren = {
+            '(': 0,
+            '{': 0,
+            '<': 0
+        }
+        tagbuf = ''
+        argbuf = ''
+        args = []
+        escaped = False
+        while len(stmt):
+            c, stmt = stmt[0], stmt[1:]
+            if c == ' ' and all(o == 0 for v,o in open_paren.items()):
+                tags.append((tagbuf, args))
+                tagbuf = ''
+                argbuf = ''
+                args = []
+            elif not escaped and c in ['(', '{', '<']:
+                if open_paren[c] == 0:
+                    argbuf = ''
+                open_paren[c] += 1
+            elif not escaped and c in [')', '}', '>']:
+                if open_paren[rev[c]] > 1:
+                    open_paren[rev[c]] -= 1
+                    argbuf += ')'
+                elif open_paren[rev[c]] == 1:
+                    open_paren[rev[c]] = 0
+                    args.append(argbuf)
+                else:
+                    tagbuf += ')'
+            elif c == '\\':
+                if escaped:
+                    escaped = False
+                    if any(o != 0 for v,o in open_paren.items()):
+                        argbuf += c
+                    else:
+                        tagbuf += c
+                else:
+                    escaped = True
+            elif not escaped and c == ',' and any(o != 0 for v,o in open_paren.items()):
+                args.append(argbuf)
+                argbuf = ''
+                while len(stmt) and stmt[0] == ' ':
+                    stmt = stmt[1:]
+                
+            else:
+                escaped = False
+                if any(o != 0 for v,o in open_paren.items()):
+                    argbuf += c
+                else:
+                    tagbuf += c
+        
+        return tags
+
+
+
 
     def handle_possible_index_update(self, bot, update):
         print('<<<', update)
@@ -559,18 +630,18 @@ class IstorayjeBot:
             text = msg.text
             if text.startswith('set:'):
                 move = True
-                tags = re.split(self.reg, text[4:].strip())
+                tags = [(x, []) for x in re.split(self.reg, text[4:].strip())]
             elif text.startswith('^delete'):
                 delete = True
             elif text.startswith('^set:'):
                 reset = True
-                tags = re.split(self.reg, text[5:].strip())
+                tags = self.parse_insertion_statement(text[5:].strip())
             elif text.startswith('^add:'):
                 add = True
-                tags = re.split(self.reg, text[5:].strip())
+                tags = self.parse_insertion_statement(text[5:].strip())
             elif text.startswith('^remove:'):
                 remove = True
-                tags = re.split(self.reg, text[8:].strip())
+                tags = self.parse_insertion_statement(text[8:].strip())
             elif text.startswith('^tags?'):
                 query = True
                 users = [msg.from_user.id]
@@ -578,6 +649,8 @@ class IstorayjeBot:
         except Exception:
             pass
         for user in users:
+            filterop = {}
+            updateop = {}
             print('> processing', user)
             try:
                 mtags = tags
@@ -596,13 +669,15 @@ class IstorayjeBot:
                     m_msgid = None
                     noreply = False
                     m_msg = None
+                    has_instant = False
                     try:
                         m_msgid = msg.reply_to_message.message_id
                         m_msg = msg.reply_to_message
                     except:
                         noreply = True
-                    mtags = list(set(x for x in [
-                        self.handle_magic_tags(
+                    ftags = set()
+                    for x in mtags: # no arguments for non-magic tags
+                        rtag = self.handle_magic_tags(
                             early=noreply,
                             tag=x,
                             message=m_msg,
@@ -610,11 +685,19 @@ class IstorayjeBot:
                                              for coll in collections],
                             users=[user]
                         )
-                        for x in mtags
-                    ] if x is not None))
-                if not mtags and any([move, add, reset, remove]):
+                        if not rtag:
+                            continue
+                        
+                        if isinstance(rtag, InstantMagicTag):
+                            has_instant = True
+                            updateop.update(rtag.generate(collections=collections, message=msg, bot=self, set=reset, add=add, remove=remove))
+                            continue
+                        
+                        ftags.add(rtag)
+                    mtags = list(ftags)
+                print(mtags)
+                if not mtags and any([move, add, reset, remove]) and not has_instant:
                     return
-                filterop = {}
                 if delete:
                     print(msg)
                     try:
@@ -629,13 +712,13 @@ class IstorayjeBot:
                         traceback.print_exc()
                         print(e)
                 elif move:
-                    updateop = {
+                    updateop.update({
                         '$push': {
                             f'collection.{coll}.index': {'id': msgid, 'tags': mtags}
                             for coll in collections
                             for msgid in self.db.db.storage.find_one({'user_id': user})['collection'][coll]['temp']
                         }
-                    }
+                    })
                     updateop.update({
                         '$set': {
                             f'collection.{coll}.temp': []
@@ -643,38 +726,38 @@ class IstorayjeBot:
                         }
                     })
                 elif add:
-                    filterop = {
-                        f'collection.{coll}.index.id': msg.reply_to_message.message_id
+                    filterop.update({ '$or': [
+                        {f'collection.{coll}.index.id': msg.reply_to_message.message_id}
                         for coll in collections
-                    }
-                    updateop = {
+                    ]})
+                    updateop.update({
                         '$push': {
                             f'collection.{coll}.index.$.tags': {'$each': mtags}
                             for coll in collections
                         }
-                    }
+                    })
                 elif remove:
-                    filterop = {
-                        f'collection.{coll}.index.id': msg.reply_to_message.message_id
+                    filterop.update({ '$or': [
+                        {f'collection.{coll}.index.id': msg.reply_to_message.message_id}
                         for coll in collections
-                    }
-                    updateop = {
+                    ]})
+                    updateop.update({
                         '$pullAll': {
                             f'collection.{coll}.index.$.tags': mtags
                             for coll in collections
                         }
-                    }
+                    })
                 elif reset:
-                    filterop = {
-                        f'collection.{coll}.index.id': msg.reply_to_message.message_id
+                    filterop.update({ '$or': [
+                        {f'collection.{coll}.index.id': msg.reply_to_message.message_id}
                         for coll in collections
-                    }
-                    updateop = {
+                    ]})
+                    updateop.update({
                         '$set': {
                             f'collection.{coll}.index.$.tags': mtags
                             for coll in collections
                         }
-                    }
+                    })
                 elif query:
                     res = sum(list(x['tags'] for x in self.db.db.storage.aggregate([
                         {'$match': {'user_id': user}},
@@ -720,9 +803,46 @@ class IstorayjeBot:
 
     reg = re.compile(r'\s+')
 
-    def parse_query(self, query):
-        coll, *queries = re.split(self.reg, query)
-        return (coll, queries)
+    def parse_query(self, gquery):
+        gquery = gquery.strip() + ' '
+        coll = ''
+        parsed_coll = False
+        open_brak = 0
+        escaped = False
+        query = []
+        qbuf = ''
+        extra = {
+            'caption': None
+        }
+        while len(gquery):
+            c, gquery = gquery[0], gquery[1:]
+            if c == ' ' and not parsed_coll and open_brak == 0:
+                if len(coll) > 0:
+                    parsed_coll = True
+                continue
+            elif c == ' ' and open_brak == 1:
+                qbuf += ' '
+            elif c == ' ':
+                if qbuf:
+                    query.append(qbuf)
+                    qbuf = ''
+            elif c == '{' and not escaped and open_brak == 0:
+                open_brak += 1
+            elif c == '\\' and not escaped:
+                escaped = True
+            elif c == '}' and not escaped and open_brak == 1:
+                open_brak = 0
+                extra['caption'] = qbuf
+                qbuf = ''
+            else:
+                escaped = False
+                if parsed_coll:
+                    qbuf += c
+                else:
+                    coll += c
+        
+        return coll, query, extra
+            
 
     def clone_messaage_with_data(self, data, tags):
         ty = data['type']
@@ -738,12 +858,14 @@ class IstorayjeBot:
         elif ty == 'mp4':
             return InlineQueryResultCachedMpeg4Gif(
                 data['msg_id'],
-                data['file_id']
+                data['file_id'],
+                caption=data.get('caption', None)
             )
         elif ty == 'gif':
             return InlineQueryResultCachedGif(
                 data['msg_id'],
-                data['file_id']
+                data['file_id'],
+                caption=data.get('caption', None)
             )
         elif ty == 'img':
             return InlineQueryResultCachedPhoto(
@@ -762,13 +884,14 @@ class IstorayjeBot:
             return InlineQueryResultCachedDocument(
                 data['msg_id'],
                 '> ' + ', '.join(tags) + ' (' + str(data['msg_id']) + ')',
-                data['file_id']
+                data['file_id'],
+                caption=data.get('caption', None)
             )
         else:
             print('unhandled msg type', ty, 'for message', data)
             return None
 
-    def try_clone_message(self, message, tags, id=None, chid=None):
+    def try_clone_message(self, message, tags, dcaption, fcaption, id=None, chid=None):
         try:
             text = message.text
             assert (text is not None)
@@ -779,7 +902,7 @@ class IstorayjeBot:
                 'chatid': chid,
                 'msg_id': id
             }
-            self.db.db.message_cache.insert_one(data)
+            self.db.db.message_cache.find_one_and_replace({'$and': [{'msg_id': id}, {'chatid': chid}]}, {k:v for k,v in data.items() if k != 'caption'}, upsert=True)
             return self.clone_messaage_with_data(data, tags)
         except:
             try:
@@ -793,14 +916,15 @@ class IstorayjeBot:
                     document = self.random.choice(document)
                     mime = 'image'
                 print('> is some sort of document')
-                caption = message.caption
+                caption = fcaption if fcaption not in ['$def', '$default', '$'] else dcaption
                 if not mime:
                     mime = document.mime_type
                 data = {
                     'file_id': document.file_id,
                     'chatid': chid,
                     'msg_id': id,
-                    'xxhash': xxhash.xxh64(self.updater.bot.get_file(file_id=document.file_id).download_as_bytearray()).digest()
+                    'xxhash': xxhash.xxh64(self.updater.bot.get_file(file_id=document.file_id).download_as_bytearray()).digest(),
+                    'caption': caption
                 }
                 if 'mp4' in mime:
                     data['type'] = 'mp4'
@@ -808,11 +932,9 @@ class IstorayjeBot:
                     data['type'] = 'gif'
                 elif 'image' in mime:
                     data['type'] = 'img'
-                    data['caption'] = caption
                 else:
                     data['type'] = 'doc'
-                    data['caption'] = caption
-                self.db.db.message_cache.insert_one(data)
+                self.db.db.message_cache.find_one_and_replace({'$and': [{'msg_id': id}, {'chatid': chid}]}, {k:v for k,v in data.items() if k != 'caption'}, upsert=True)
                 return self.clone_messaage_with_data(data, tags)
             except:
                 try:
@@ -825,7 +947,7 @@ class IstorayjeBot:
                         'chatid': message.chat.id,
                         'msg_id': message.message_id,
                     }
-                    self.db.db.message_cache.insert_one(data)
+                    self.db.db.message_cache.find_one_and_replace({'$and': [{'msg_id': data['msg_id']}, {'chatid': data['chatid']}]}, {k:v for k,v in data.items() if k != 'caption'}, upsert=True)
                     return self.clone_messaage_with_data(data, tags)
                 except Exception as e:
                     traceback.print_exc()
@@ -835,7 +957,9 @@ class IstorayjeBot:
 
     def handle_query(self, bot, update, user_data=None, chat_data=None):
         try:
-            coll, query = self.parse_query(update.inline_query.query)
+            coll, query, extra = self.parse_query(update.inline_query.query)
+            fcaption = extra.get('caption', None)
+            print(update.inline_query.query, '->', repr(coll), repr(query), extra)
             if not coll or coll == '':
                 return
 
@@ -846,7 +970,7 @@ class IstorayjeBot:
                                               input_message_content=InputTextMessageContent('This user is an actual idiot'))]
                 )
                 return
-            colls = list((x['index']['id'], x['index']['tags']) for x in
+            colls = list((x['index']['id'], x['index']['tags'], x['index'].get('caption', None), x['index'].get('cache_stale', False)) for x in
                          self.db.db.storage.aggregate([
                              {'$match': {
                                  'user_id': update.inline_query.from_user.id
@@ -898,6 +1022,7 @@ class IstorayjeBot:
                                                               })
                     if not cmsg:
                         print('> id', msgid, 'not found...?')
+                    cmsg['caption'] = fcaption
                     results.append(self.clone_messaage_with_data(
                         cmsg, ['last', 'used']))
             if len(results) > 1:
@@ -941,12 +1066,13 @@ class IstorayjeBot:
                                                               [{'chatid': chatid}, {
                                                                   'msg_id': col[0]}]
                                                               })
-                    if cmsg:
+                    if cmsg and not col[3]:
                         print('cache hit for message', col[0], ':', cmsg)
+                        cmsg['caption'] = fcaption if fcaption not in ['$def', '$default', '$'] else dcaption
                         cloned_message = self.clone_messaage_with_data(
                             cmsg, col[1])
                     else:
-                        print('cache miss for message', col[0], 'trying to load it')
+                        print('cache miss for message', col[0], ('(cache was stale) ::' if col[3] else '::'), 'trying to load it')
                         msg = bot.forward_message(
                             chat_id=tempid,
                             from_chat_id=chatid,
@@ -954,7 +1080,7 @@ class IstorayjeBot:
                             disable_notification=True,
                         )
                         cloned_message = self.try_clone_message(
-                            msg, col[1], id=col[0], chid=chatid)
+                            msg, col[1], id=col[0], chid=chatid, fcaption=fcaption, dcaption=col[2])
                         print('duplicated message found:', msg)
 
                         msg.delete()
@@ -1119,7 +1245,7 @@ class IstorayjeBot:
 
     def rehash_all(self, bot, update):
         index = list((x['_id'], x['file_id'])
-                     for x in self.db.db.message_cache.find({'file_id': {'$ne': None}}))
+                     for x in self.db.db.message_cache.find({'$and': [{'file_id': {'$ne': None}}, {'cache_stale': None}]}))
         update.message.reply_text(f'found {len(index)} items, updating...')
         mod = 0
         for item in index:
@@ -1131,3 +1257,32 @@ class IstorayjeBot:
             except:
                 traceback.print_exc()
         update.message.reply_text(f'Rehash done, updated {mod} entries')
+
+
+class InstantMagicTag:
+    def __init__(self, name, argument=None, arguments=None, handler=None, can_handle=None):
+        self.name = name
+        self.handler = handler
+        self.can_handle = can_handle or []
+        if argument:
+            self.arguments = [argument]
+            self.kind = 'single'
+        elif arguments:
+            self.arguments = arguments
+            self.kind = 'multiple'
+        else:
+            self.arguments = [None]
+            self.kind = 'single'
+    
+    def generate(self, collections, message, bot, **kwargs):
+        if not self.handler or not all(x in self.can_handle for x in kwargs if kwargs[x]):
+            return {}
+        return self.handler(collections, message, bot, self.arg)
+
+    @property
+    def arg(self):
+        if self.kind == 'single':
+            return self.arguments[0]
+        else:
+            return self.arguments
+    
