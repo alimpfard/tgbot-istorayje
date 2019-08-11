@@ -1210,9 +1210,18 @@ class IstorayjeBot:
 
         update.message.reply_text(
             'To search any given collection, use the bot\'s inline interface as such:\n' +
-            '    @istorayjebot _collection_ _query_\n' +
+            '    @istorayjebot _collection_ _query_ _{caption}_\n' +
+            'The caption can be omitted, or set as any of the following to get the "default" caption:\n' +
+            '    `$def` or `$default` or `$`' +
             'for example:\n' +
-            '    @istorayjebot gif misaka nah',
+            '    @istorayjebot gif misaka nah {$}\n' +
+            'To match "misaka" and "nah" from the collection "gif" and give it the default (if set) caption\n' +
+            'or another example:\n' +
+            '    @istorayjebot gif lol\n' +
+            'To match "lol" in collection "gif" and send no caption\n' +
+            'or yet another example:\n' +
+            '    @istorayjebot gif fish {Help\\, I am drowning!}\n' +
+            'to match "fish" in collection "gif" and give it the caption "Help, I am drowning!" (note the escaped comma)',
             parse_mode=ParseMode.MARKDOWN
         )
         update.message.reply_text(
