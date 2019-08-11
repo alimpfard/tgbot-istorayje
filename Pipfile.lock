@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "1162291005f372023f456bcccf2744ad42d725d511ae4d3edb2a12d8f6f63baf"
+            "sha256": "dfd4c78d4605f3e5e048dc41399311b818015c1a1481dcc582859f63270e17b0"
         },
         "pipfile-spec": 6,
         "requires": {
@@ -167,6 +167,13 @@
             ],
             "index": "pypi",
             "version": "==3.8.0"
+        },
+        "pypng": {
+            "hashes": [
+                "sha256:1032833440c91bafee38a42c38c02d00431b24c42927feb3e63b104d8550170b"
+            ],
+            "index": "pypi",
+            "version": "==0.0.20"
         },
         "python-telegram-bot": {
             "hashes": [

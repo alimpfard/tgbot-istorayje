@@ -15,6 +15,7 @@ xxhash = "*"
 requests = "*"
 pycurl = "*"
 beautifulsoup4 = "*"
+pypng = "*"
 
 [requires]
 python_version = "3.7"

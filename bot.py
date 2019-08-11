@@ -13,7 +13,7 @@ from telegram.ext import ChosenInlineResultHandler
 # from googlecloud import getCloudAPIDetails
 from googleimgsearch import searchGoogleImages
 from trace import getTraceAPIDetails
-from extern import pke_tagify
+from extern import pke_tagify, store_image, get_some_frame
 
 from db import DB
 import re
@@ -28,6 +28,8 @@ from threading import Event
 from time import time
 import random
 from datetime import timedelta
+import hashlib
+import png
 
 
 def get_any(obj, lst):
@@ -231,7 +233,7 @@ class IstorayjeBot:
 
             if doc['service'] == 'google':
                 print('google', doc)
-                details = searchGoogleImages(self.updater.bot.get_file(file_id=doc['fileid'])._get_encoded_url())
+                details = searchGoogleImages(doc['dlpath'])
                 if not details:
                     resp = doc['response_id']
                     self.updater.bot.edit_message_text(
@@ -385,7 +387,18 @@ class IstorayjeBot:
 
                 if any(x in mime for x in ['gif', 'mp4']):
                     if google:
-                        insert['fileid'] = doc.thumb.file_id
+                        content = get_some_frame(self.updater.bot.get_file(file_id=doc.file_id)._get_encoded_url(), format='mp4' if 'mp4' in mime else 'gif')
+                        print(content)
+                        p = png.Reader(bytes=content).read()
+                        m = hashlib.md5()
+                        m.update(content)
+                        insert['dlpath'] = store_image(
+                                            content=content,
+                                            width=p[0],
+                                            height=p[1],
+                                            type='image/png',
+                                            checksum=m.digest()
+                                        )
                     else:
                         insert['filecontent'] = bytes(self.updater.bot.get_file(
                             file_id=doc.thumb.file_id).download_as_bytearray())
@@ -410,6 +423,7 @@ class IstorayjeBot:
 
             rmm = message.reply_text(f'will process {tag} and edit this message with the result in a bit.')
             insert['response_id'] = [rmm.message_id, rmm.chat_id]
+            print(insert)
             self.db.db.tag_updates.insert_one(insert)
             return None
         return tag
