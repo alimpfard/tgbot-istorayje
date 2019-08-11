@@ -1220,8 +1220,8 @@ class IstorayjeBot:
             '    @istorayjebot gif lol\n' +
             'To match "lol" in collection "gif" and send no caption\n' +
             'or yet another example:\n' +
-            '    @istorayjebot gif fish {Help\\, I am drowning!}\n' +
-            'to match "fish" in collection "gif" and give it the caption "Help, I am drowning!" (note the escaped comma)',
+            '    @istorayjebot gif fish {Help, I am drowning!}\n' +
+            'to match "fish" in collection "gif" and give it the caption "Help, I am drowning!"',
             parse_mode=ParseMode.MARKDOWN
         )
         update.message.reply_text(
