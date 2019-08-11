@@ -24,7 +24,7 @@ import traceback
 import json
 import xxhash
 import pickle
-from threading import Event, get_ident
+from threading import Event
 from time import time
 import random
 from datetime import timedelta
@@ -445,7 +445,7 @@ class IstorayjeBot:
             self.db.db.tag_updates.insert_one(insert)
             return None
         return tag
-    
+
     def parse_insertion_statement(self, stmt: str, rev={'(': ')', ')': '(', '{': '}', '}': '{', '<': '>', '>': '<'}):
         tags = []
         stmt = stmt.strip() + ' '
@@ -492,14 +492,14 @@ class IstorayjeBot:
                 argbuf = ''
                 while len(stmt) and stmt[0] == ' ':
                     stmt = stmt[1:]
-                
+
             else:
                 escaped = False
                 if any(o != 0 for v,o in open_paren.items()):
                     argbuf += c
                 else:
                     tagbuf += c
-        
+
         return tags
 
 
@@ -687,12 +687,12 @@ class IstorayjeBot:
                         )
                         if not rtag:
                             continue
-                        
+
                         if isinstance(rtag, InstantMagicTag):
                             has_instant = True
                             updateop.update(rtag.generate(collections=collections, message=msg, bot=self, set=reset, add=add, remove=remove))
                             continue
-                        
+
                         ftags.add(rtag)
                     mtags = list(ftags)
                 print(mtags)
@@ -840,9 +840,9 @@ class IstorayjeBot:
                     qbuf += c
                 else:
                     coll += c
-        
+
         return coll, query, extra
-            
+
 
     def clone_messaage_with_data(self, data, tags):
         ty = data['type']
@@ -1068,7 +1068,7 @@ class IstorayjeBot:
                                                               })
                     if cmsg and not col[3]:
                         print('cache hit for message', col[0], ':', cmsg)
-                        cmsg['caption'] = fcaption if fcaption not in ['$def', '$default', '$'] else dcaption
+                        cmsg['caption'] = fcaption if fcaption not in ['$def', '$default', '$'] else col[2]
                         cloned_message = self.clone_messaage_with_data(
                             cmsg, col[1])
                     else:
@@ -1228,7 +1228,18 @@ class IstorayjeBot:
         msg.reply_text(
             '^add: newtag another-new-tag'
         )
-
+        update.message.reply_text(
+            'in the later stage (when you would modify tags with ^<cmd>), you can use some "magic" tags that do different things\n' +
+            'Here is a short description of some:\n' +
+            '    $google(_minimum accepted accuracy_)\n' +
+            '        reverse searches google and finds some matching tags\n' +
+            '    $anime(_minimum accepted accuracy_)\n' +
+            '        tries to find the name of the anime (cropped images/gifs will not work)\n' +
+            '    $caption(_default caption_)\n' +
+            '        sets a "default" caption for the message (not texts)\n' +
+            'The default _minimum accepted accuracy_ is 60%, and *commas have to be escaped in captions*\n',
+            parse_mode=ParseMode.MARKDOWN
+        )
     def reverse_search(self, bot, update, fuzzy=False):
         update.message.reply_text(
             'Send the document/image/GIF (text will not be processed)'
@@ -1273,7 +1284,7 @@ class InstantMagicTag:
         else:
             self.arguments = [None]
             self.kind = 'single'
-    
+
     def generate(self, collections, message, bot, **kwargs):
         if not self.handler or not all(x in self.can_handle for x in kwargs if kwargs[x]):
             return {}
@@ -1285,4 +1296,4 @@ class InstantMagicTag:
             return self.arguments[0]
         else:
             return self.arguments
-    
+
