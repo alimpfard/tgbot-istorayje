@@ -233,7 +233,7 @@ class IstorayjeBot:
 
             if doc['service'] == 'google':
                 print('google', doc)
-                details = searchGoogleImages(doc['dlpath'])
+                details = searchGoogleImages(self.updater.bot.get_file(doc['fileid'])._get_encoded_url())
                 if not details:
                     resp = doc['response_id']
                     self.updater.bot.edit_message_text(
@@ -388,16 +388,21 @@ class IstorayjeBot:
                 if any(x in mime for x in ['gif', 'mp4']):
                     if google:
                         content = get_some_frame(self.updater.bot.get_file(file_id=doc.file_id)._get_encoded_url(), format='mp4' if 'mp4' in mime else 'gif')
-                        print(content)
-                        p = png.Reader(bytes=content).read()
-                        m = hashlib.md5()
-                        m.update(content)
-                        insert['dlpath'] = store_image(
-                                            content=content,
-                                            width=p[0],
-                                            height=p[1],
-                                            type='image/png',
-                                            checksum=m.digest()
+                        # print(content)
+                        # p = png.Reader(bytes=content).read()
+                        # m = hashlib.md5()
+                        # m.update(content)
+                        tmp = self.db.db.storage.find_one({'$and': [{'user_id': {'$in': users}}, {'temp.id': {'$ne': None}}]})
+                        if not tmp:
+                            message.reply_text(f'none of the receiving users ({", ".join(users)}) has a temp set, impossible to process')
+                            return None
+                        insert['fileid'] = store_image(
+                                            bot=self,
+                                            file=BytesIO(content),
+                                            # width=p[0],
+                                            # height=p[1],
+                                            # type='image/png',
+                                            chat=tmp['temp']['id']
                                         )
                     else:
                         insert['filecontent'] = bytes(self.updater.bot.get_file(
@@ -620,6 +625,7 @@ class IstorayjeBot:
                             }
                         }
                     except Exception as e:
+                        traceback.print_exc()
                         print(e)
                 elif move:
                     updateop = {
@@ -696,6 +702,7 @@ class IstorayjeBot:
                 })
                 self.db.db.storage.update_one(filterop, updateop)
             except Exception as e:
+                traceback.print_exc()
                 print(e)
 
     def handle_list_index(self, bot, update):
@@ -1049,6 +1056,7 @@ class IstorayjeBot:
                 '$addToSet': {'index.' + username: update.message.from_user.id}
             }, upsert=True)
         except Exception as e:
+            traceback.print_exc()
             print(e)
         del self.context[update.message.from_user.id]
 

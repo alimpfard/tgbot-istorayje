@@ -17,23 +17,11 @@ def get_some_frame(url, format=None):
     res = requests.post(PKE_TAGIFY_URL + '/getframe', json={'url': url, 'format': format})
     return res.content
 
-def store_image(content, width, height, type, checksum):
-    res = requests.post(STORE_URL,
-            params={
-                'width': width,
-                'height': height,
-                'type': type,
-                'checksum': checksum,
-            },
-            data=content,
-            headers={
-                'User-Agent': "",
-                'TE': 'Trailers',
-                'Content-Type': 'raw'
-            })
-    try:
-        return res.json().get('alias', None)
-    except:
-        print(res, res.content)
-        return None
-
+def store_image(bot, file, chat):
+    msg = bot.updater.bot.send_document(
+        chat_id=chat,
+        document=file,
+        disable_notification=True
+    )
+    print(msg)
+    return msg.effective_attachment.file_id
