@@ -28,6 +28,9 @@ from threading import Event
 from time import time
 import random
 from datetime import timedelta
+from nltk.corpus import stopwords
+from nltk.corpus import wordnet as wn
+from nltk.stem import PorterStemmer
 
 
 def get_any(obj, lst):
@@ -41,6 +44,8 @@ def get_any(obj, lst):
 
 class IstorayjeBot:
     def __init__(self, token, db: DB):
+        self.stemmer = PorterStemmer()
+        self.stopwordset = stopwords.words('english')
         self.random = random.Random()
         self.token = token
         self.updater = Updater(token)
@@ -351,12 +356,21 @@ class IstorayjeBot:
 
         if self.db.db.tag_updates.count_documents({}) != 0:
             self.updater.job_queue.run_once(self.process_insertions, timedelta(seconds=30)) # todo: based on load
+    def sample(self, iterator, k):
+        result = [next(iterator) for _ in range(k)]
+
+        n = k - 1
+        for item in iterator:
+            n += 1
+            s = self.random.randint(0, n)
+            if s < k:
+                result[s] = item
+
+        return result
 
     def handle_magic_tags(self, tag: str, message: object, insertion_paths: list, early: bool, users: list):
         tag, targs = tag
         if tag.startswith('$'):
-            if early:
-                return None
             tag = tag[1:]
             print('magic tag', tag, 'with args', targs)
             insert = {
@@ -368,6 +382,8 @@ class IstorayjeBot:
                 'users': users,
             }
             if tag in ['google', 'anime']:
+                if early:
+                    return None
                 doc = get_any(message, ['document', 'sticker', 'photo'])
                 mime = None
                 if isinstance(doc, list):
@@ -423,6 +439,8 @@ class IstorayjeBot:
 
                 insert['service'] = tag
             elif tag in ['caption', 'default_caption', 'defcap', 'defcaption', 'cap']:
+                if early:
+                    return None
                 if len(targs) > 1:
                     return 'magic::$caption::requires(one or zero arguments)'
                 def handle(collections, message, bot, arg):
@@ -433,6 +451,38 @@ class IstorayjeBot:
                         }
                     }
                 return InstantMagicTag('caption', argument=targs[0], handler=handle, can_handle=['add'])
+            elif tag in ['syn', 'synonyms']:
+                if len(targs) < 1:
+                    return 'magic::$synonyms::requires(more than zero arguments)'
+                words = []
+                options = {
+                    'hypernym-depth': 0,
+                    'hyponyms': 0,
+                    'count': 10,
+                }
+                for arg in targs:
+                    if arg.startswith(':'):
+                        arg = arg[1:]
+                        opt, *arg = re.split(r'\s+', arg, maxsplit=1)
+                        print(opt, arg)
+                        if opt in options:
+                            try:
+                                options[opt] = int(arg[0] if len(arg) else 1)
+                            except:
+                                pass
+                    else:
+                        words.append(arg)
+                synsets = set(sum((wn.synsets(word) for word in words), []))
+                for depth in range(options['hypernym-depth']):
+                    synsets.update([hyp for syn in synsets for hyp in syn.hypernyms()])
+                
+                if options['hyponyms']:
+                    synsets.update([hyp for syn in synsets for hyp in syn.hyponyms()])
+                try:
+                    res0 = (lemma.name() for synset in synsets for lemma in synset.lemmas())
+                    return self.sample(res0, options['count'])
+                except Exception as e:
+                    return f'magic::$synonyms::error(not enough synonyms present, set a lower :count, {e})'
             else:
                 return 'unsupported_magic::$' + tag
 
@@ -501,9 +551,6 @@ class IstorayjeBot:
                     tagbuf += c
 
         return tags
-
-
-
 
     def handle_possible_index_update(self, bot, update):
         print('<<<', update)
@@ -630,7 +677,7 @@ class IstorayjeBot:
             text = msg.text
             if text.startswith('set:'):
                 move = True
-                tags = [(x, []) for x in re.split(self.reg, text[4:].strip())]
+                tags = self.parse_insertion_statement(text[4:].strip())
             elif text.startswith('^delete'):
                 delete = True
             elif text.startswith('^set:'):
@@ -691,6 +738,10 @@ class IstorayjeBot:
                         if isinstance(rtag, InstantMagicTag):
                             has_instant = True
                             updateop.update(rtag.generate(collections=collections, message=msg, bot=self, set=reset, add=add, remove=remove))
+                            continue
+                        
+                        elif isinstance(rtag, list):
+                            ftags.update(rtag)
                             continue
 
                         ftags.add(rtag)
@@ -810,6 +861,7 @@ class IstorayjeBot:
         open_brak = 0
         escaped = False
         query = []
+        qstack = []
         qbuf = ''
         extra = {
             'caption': None
@@ -834,14 +886,22 @@ class IstorayjeBot:
                 open_brak = 0
                 extra['caption'] = qbuf
                 qbuf = ''
+            elif c == '|' and not escaped and open_brak == 0:
+                if qbuf != '':
+                    query.append(qbuf)
+                    qbuf = ''
+                qstack.append(query)
+                query = []
             else:
                 escaped = False
                 if parsed_coll:
                     qbuf += c
                 else:
                     coll += c
+        if query != []:
+            qstack.append(query)
 
-        return coll, query, extra
+        return coll, qstack, extra
 
 
     def clone_messaage_with_data(self, data, tags):
@@ -955,6 +1015,31 @@ class IstorayjeBot:
                     return None
         return None
 
+    def process_search_query_further(self, query: list):
+        qq = query[:]
+        qs = set(tuple(x) for x in query)
+        sw = self.stopwordset
+        for terms in query:
+            tts = [[]]
+            for term in terms:
+                pt = self.stemmer.stem(term)
+                if pt != term:
+                    for tt in tts[:]: # ouch
+                        if term not in sw and pt not in sw:
+                            tts.remove(tt)
+                        tts.append(tt + [pt])
+                        tts.append(tt + [term])
+                else:
+                    for tt in tts:
+                        tt.append(pt)
+            for tt in tts:
+                tp = tuple(tt)
+                if tp not in qs:
+                    qq.append(tt)
+                    qs.add(tp)
+        return qq
+
+
     def handle_query(self, bot, update, user_data=None, chat_data=None):
         try:
             coll, query, extra = self.parse_query(update.inline_query.query)
@@ -970,6 +1055,8 @@ class IstorayjeBot:
                                               input_message_content=InputTextMessageContent('This user is an actual idiot'))]
                 )
                 return
+            query = self.process_search_query_further(query)
+            
             colls = list((x['index']['id'], x['index']['tags'], x['index'].get('caption', None), x['index'].get('cache_stale', False)) for x in
                          self.db.db.storage.aggregate([
                              {'$match': {
@@ -983,21 +1070,24 @@ class IstorayjeBot:
                              },
                              {'$unwind': '$index'},
                              {'$match': {
-                                 'index.tags': {
-                                     '$all': query
-                                 }
+                                 '$or': [
+                                    {'index.tags': {
+                                        '$all': q
+                                    }}
+                                    for q in query
+                                 ]
                              }
                              },
                              {'$limit': 5}
-                         ]))
+                         ])) if query else []
             results = [InlineQueryResultArticle(
                 id=uuid4(),
                 title='>> ' +
-                ' '.join(query or ['Your', 'Recent', 'Selections']),
+                '|'.join((" ".join(q) for q in (query or [['Your Recent Selections']]))),
+    
                 input_message_content=InputTextMessageContent(
                     'Search for `' +
-                    ' '.join(
-                        query) + '\' and more~' if len(query) else 'Yes, these are your recents'
+                    '|'.join(' '.join(q) for q in query) + '\' and more~' if len(query) else 'Yes, these are your recents'
                 )
             )]
             userdata = self.db.db.storage.find_one(
@@ -1038,7 +1128,7 @@ class IstorayjeBot:
                         id=uuid4(),
                         title='no result matching query found',
                         input_message_content=InputTextMessageContent(
-                            f'<imaginary result matching {" ".join(query)}>')
+                            f'<imaginary result matching {"|".join(" ".join(q) for q in query)}>')
                     )
                 )
                 cachetime = 60
