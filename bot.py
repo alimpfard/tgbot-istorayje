@@ -162,6 +162,7 @@ class IstorayjeBot:
             CommandHandler('reverse_fuzzy', self.reverse_search_fuzzy),
             CommandHandler('rehash', self.rehash_all),
             CommandHandler('help', self.help),
+            CommandHandler('magics', self.help_magics),
             ChosenInlineResultHandler(self.on_result_chosen),
             InlineQueryHandler(self.handle_query,
                                pass_user_data=True, pass_chat_data=True),
@@ -1339,6 +1340,63 @@ class IstorayjeBot:
             'The default _minimum accepted accuracy_ is 60%, and *commas have to be escaped in captions*\n',
             parse_mode=ParseMode.MARKDOWN
         )
+    
+    def help_magics(self, bot, update):
+        index = [
+            'Magic Tags Index\n'
+            '\n'
+            'This is a listing of all supported magic tags and their properties:\n',
+
+            '`$google` - search google for relevant tags\n'
+            '  arguments:\n'
+            '      - positional _minimum accepted accuracy_ [int]: tags with confidence less than this will be ignored\n'
+            '      - optional literal _cloud_ [literal]: supposed to search with google Vision ML. currently ignored.\n'
+            '  short forms:\n'
+            '      None\n'
+            '  document types:\n'
+            '      media documents [image, video, GIF]\n'
+            '  further notes:\n'
+            '      None\n',
+            
+            '`$anime` - search for anime title\n'
+            '  arguments:\n'
+            '       - position _minimum accepted accuracy_ [int]: results with confidence less than this will be ignored\n'
+            '  short forms:\n'
+            '      None\n'
+            '  document types:\n'
+            '      media documents [image, video, GIF]\n'
+            '  further notes:\n'
+            '      Cropped images of anime will likely yield incorrect results\n',
+
+            '`$synonyms` - find and add synonyms or related words\n'
+            '  arguments:\n'
+            '      - mixed literal _word_ [literal] (multiple allowed): words to process\n'
+            '      - optional opt mixed literal _:hypernym-depth {depth}_ [literal] (takes an int modifier "depth"): include words related by categories up to _depth_ categories\n'
+            '      - optional opt mixed literal _:count {count}_ [literal] (takes an int modifier "count"): include this many results (default 10)\n'
+            '      - optional opt literal _:hyponyms_ [literal]: includes words related in the same category\n'
+            '  short forms:\n'
+            '      `$syn`\n'
+            '  document types:\n'
+            '      all document types\n'
+            '  further notes:\n'
+            '      None\n',
+
+            '`$caption` - add a default caption invokable by {$} in inline queries\n'
+            '  arguments:\n'
+            '      - positional literal _caption_ [literal]: the would-be default caption (escape commas with a backslash "\\")\n'
+            '  short forms:\n'
+            '      `$cap`, `$defcap`\n'
+            '  document types:\n'
+            '      media documents [image, video, GIF]\n'
+            '  further notes:\n'
+            '      None\n',
+        ]
+        for i in index:
+            update.message.reply_text(
+                i,
+                parse_mode=ParseMode.MARKDOWN
+            )
+
     def reverse_search(self, bot, update, fuzzy=False):
         update.message.reply_text(
             'Send the document/image/GIF (text will not be processed)'
