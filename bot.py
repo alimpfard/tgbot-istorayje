@@ -1345,9 +1345,11 @@ class IstorayjeBot:
         index = [
             'Magic Tags Index\n'
             '\n'
+            'TODO: Add online documentation for this stuff\n'
             'This is a listing of all supported magic tags and their properties:\n',
 
             '`$google` - search google for relevant tags\n'
+            '  stage 2\n'
             '  arguments:\n'
             '      - positional _minimum accepted accuracy_ [int]: tags with confidence less than this will be ignored\n'
             '      - optional literal _cloud_ [literal]: supposed to search with google Vision ML. currently ignored.\n'
@@ -1357,8 +1359,9 @@ class IstorayjeBot:
             '      media documents [image, video, GIF]\n'
             '  further notes:\n'
             '      None\n',
-            
+
             '`$anime` - search for anime title\n'
+            '  stage 2\n'
             '  arguments:\n'
             '       - position _minimum accepted accuracy_ [int]: results with confidence less than this will be ignored\n'
             '  short forms:\n'
@@ -1369,6 +1372,7 @@ class IstorayjeBot:
             '      Cropped images of anime will likely yield incorrect results\n',
 
             '`$synonyms` - find and add synonyms or related words\n'
+            '  stage 1\n'
             '  arguments:\n'
             '      - mixed literal _word_ [literal] (multiple allowed): words to process\n'
             '      - optional opt mixed literal _:hypernym-depth {depth}_ [literal] (takes an int modifier "depth"): include words related by categories up to _depth_ categories\n'
@@ -1382,6 +1386,7 @@ class IstorayjeBot:
             '      None\n',
 
             '`$caption` - add a default caption invokable by {$} in inline queries\n'
+            '  stage 2\n'
             '  arguments:\n'
             '      - positional literal _caption_ [literal]: the would-be default caption (escape commas with a backslash "\\")\n'
             '  short forms:\n'
