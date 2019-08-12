@@ -13,7 +13,7 @@ from telegram.ext import ChosenInlineResultHandler
 # from googlecloud import getCloudAPIDetails
 from googleimgsearch import searchGoogleImages
 from trace import getTraceAPIDetails
-from extern import pke_tagify, store_image, get_some_frame
+from extern import pke_tagify, store_image, get_some_frame, process_gifops
 
 from db import DB
 import re
@@ -43,7 +43,7 @@ def get_any(obj, lst):
 
 
 class IstorayjeBot:
-    def __init__(self, token, db: DB):
+    def __init__(self, token, db: DB, dev=False):
         self.stemmer = PorterStemmer()
         self.stopwordset = stopwords.words('english')
         self.random = random.Random()
@@ -59,7 +59,7 @@ class IstorayjeBot:
             # self.updater.job_queue.run_repeating(
                 # self.save_jobs, timedelta(minutes=5))
             self.updater.job_queue.run_repeating( # it will re-add itself based on load if more is required
-                self.process_insertions, timedelta(minutes=1))
+                self.process_insertions, (timedelta(minutes=1) if not dev else timedelta(seconds=10)))
 
         self.context = {}
 
@@ -323,6 +323,80 @@ class IstorayjeBot:
                 if docv['is_adult']:
                     instags.push('nsfw')
 
+            elif doc['service'] == 'gifop':
+                res = process_gifops(
+                    url=self.updater.bot.get_file(doc['fileid'])._get_encoded_url(),
+                    ops={x:doc[x] for x in ['reverse', 'speed', 'skip', 'early', 'append'] if x in doc},
+                    format=doc['format']
+                )
+                resp = doc['response_id']
+                if res == b'':
+                    self.updater.bot.edit_message_text(
+                        f'Failed: operation failed',
+                        chat_id=resp[1],
+                        message_id=resp[0],
+                    )
+                    continue
+                msgid = None
+                try:
+                    msgid = self.updater.bot.send_animation(
+                        doc['response_id'][1],
+                        BytesIO(res)
+                    ).message_id
+                except Exception as e:
+                    self.updater.bot.edit_message_text(
+                        f'Failed: operation failed: {e}',
+                        chat_id=resp[1],
+                        message_id=resp[0],
+                    )
+                    continue
+
+                insps = list((x[0], a['index']) for x in doc['insertion_paths'] for a in self.db.db.storage.aggregate([
+                    {'$match': {'user_id': {'$in': doc['users']}}},
+                    {'$project': {'index': f'$collection.{x[0]}.index'}},
+                    {'$unwind': {'path': '$index', 'includeArrayIndex': 'idx'}},
+                    {'$match': {'index.id': x[1]}},
+                    {'$project': {'index': '$idx'}}
+                ]))
+                if doc['replace']:
+                    ins = {'$set': {f'collection.{p[0]}.index.{p[1]}.id': msgid for p in insps}}
+                    self.db.db.storage.update_many({'user_id': {'$in': doc['users']}}, ins)
+                    self.updater.bot.edit_message_text(
+                        f'Completed: applied conversion and modified index',
+                        chat_id=resp[1],
+                        message_id=resp[0],
+                    )
+                else:
+                    document = self.db.db.storage.find_one({
+                        '$and': [
+                            {'user_id': {'$in': doc['users']}}, 
+                            {'$not': 
+                                {'$and': [
+                                    {f'collection.{p[0]}.index.{p[1]}.id': None} for p in insps
+                                ]}
+                            }
+                        ]
+                    })
+                    if not document:
+                        self.updater.bot.edit_message_text(
+                            f'Failed: not a single user whom has indexed the original message found',
+                            chat_id=resp[1],
+                            message_id=resp[0],
+                        )
+                        continue
+                    ins = {
+                        '$set': {
+                            f'collection.{p[0]}.index.{p[1]}': document[f'collection.{p[0]}.index.{p[1]}']
+                            for p in insps
+                        }
+                    }
+                    self.db.db.storage.update_many({'user_id': {'$in': doc['users']}}, ins)
+                    self.updater.bot.edit_message_text(
+                        f'Completed: applied conversion and added to index',
+                        chat_id=resp[1],
+                        message_id=resp[0],
+                    )
+                continue
             instags = list(set(instags))
 
             if len(instags):
@@ -484,6 +558,48 @@ class IstorayjeBot:
                     return self.sample(res0, options['count'])
                 except Exception as e:
                     return f'magic::$synonyms::error(not enough synonyms present, set a lower :count, {e})'
+            elif tag == 'gifop':
+                if early:
+                    return None
+                insert['service'] = 'gifop'
+                operations = {
+                    'reverse': None,
+                    'speed': None,
+                    'skip': None,
+                    'early': None,
+                    'append': None,
+                    'replace': None,
+                }
+                for opt in targs:
+                    if opt == 'reverse':
+                        operations['reverse'] = True
+                    elif opt == 'append':
+                        operations['append'] = True
+                    elif opt == 'replace':
+                        operations['replace'] = True
+                    else:
+                        if opt.startswith('speed '):
+                            operations['speed'] = float(opt[6:].strip())
+                        elif opt.startswith('skip ') or opt.startswith('early '):
+                            op = ['skip', 'early'][opt[0] == 'e']
+                            value, unit = None, None
+                            value, unit, *_ = opt[len(op):].strip().split(' ')
+                            print(repr(opt[len(op):]), repr(value), repr(unit))
+                            operations[op] = {'value': int(value), 'unit': unit}
+                if not any(operations[x] for x in operations) and operations['speed'] != 1:
+                    return None
+                doc = get_any(message, ['document'])
+                if not doc:
+                    return None
+                mime = doc.mime_type
+                if not mime or not any(x in mime for x in ['gif', 'mp4']):
+                    return None
+                # it's a GIF
+                operations['format'] = 'gif' if 'gif' in mime else 'mp4'
+                operations['message_id'] = message.message_id
+                operations['chat_id'] = message.chat_id
+                operations['fileid'] = doc.file_id
+                insert.update({k:v for k,v in operations.items() if v})
             else:
                 return 'unsupported_magic::$' + tag
 
@@ -1351,33 +1467,33 @@ class IstorayjeBot:
             '`$google` - search google for relevant tags\n'
             '  stage 2\n'
             '  arguments:\n'
-            '      - positional _minimum accepted accuracy_ [int]: tags with confidence less than this will be ignored\n'
-            '      - optional literal _cloud_ [literal]: supposed to search with google Vision ML. currently ignored.\n'
+            '      - positional _minimum accepted accuracy_ <int>: tags with confidence less than this will be ignored\n'
+            '      - optional literal _cloud_ <literal>: supposed to search with google Vision ML. currently ignored.\n'
             '  short forms:\n'
             '      None\n'
             '  document types:\n'
-            '      media documents [image, video, GIF]\n'
+            '      media documents <image, video, GIF>\n'
             '  further notes:\n'
             '      None\n',
 
             '`$anime` - search for anime title\n'
             '  stage 2\n'
             '  arguments:\n'
-            '       - position _minimum accepted accuracy_ [int]: results with confidence less than this will be ignored\n'
+            '       - position _minimum accepted accuracy_ <int>: results with confidence less than this will be ignored\n'
             '  short forms:\n'
             '      None\n'
             '  document types:\n'
-            '      media documents [image, video, GIF]\n'
+            '      media documents <image, video, GIF>\n'
             '  further notes:\n'
             '      Cropped images of anime will likely yield incorrect results\n',
 
             '`$synonyms` - find and add synonyms or related words\n'
             '  stage 1\n'
             '  arguments:\n'
-            '      - mixed literal _word_ [literal] (multiple allowed): words to process\n'
-            '      - optional opt mixed literal _:hypernym-depth {depth}_ [literal] (takes an int modifier "depth"): include words related by categories up to _depth_ categories\n'
-            '      - optional opt mixed literal _:count {count}_ [literal] (takes an int modifier "count"): include this many results (default 10)\n'
-            '      - optional opt literal _:hyponyms_ [literal]: includes words related in the same category\n'
+            '      - mixed literal _word_ <literal> (multiple allowed): words to process\n'
+            '      - optional opt mixed literal _:hypernym-depth {depth}_ <literal> (takes an int modifier "depth"): include words related by categories up to _depth_ categories\n'
+            '      - optional opt mixed literal _:count {count}_ <literal> (takes an int modifier "count"): include this many results (default 10)\n'
+            '      - optional opt literal _:hyponyms_ <literal>: includes words related in the same category\n'
             '  short forms:\n'
             '      `$syn`\n'
             '  document types:\n'
@@ -1388,13 +1504,30 @@ class IstorayjeBot:
             '`$caption` - add a default caption invokable by {$} in inline queries\n'
             '  stage 2\n'
             '  arguments:\n'
-            '      - positional literal _caption_ [literal]: the would-be default caption (escape commas with a backslash "\\")\n'
+            '      - positional literal _caption_ <literal>: the would-be default caption (escape commas with a backslash "\\")\n'
             '  short forms:\n'
             '      `$cap`, `$defcap`\n'
             '  document types:\n'
-            '      media documents [image, video, GIF]\n'
+            '      media documents <image, video, GIF>\n'
             '  further notes:\n'
             '      None\n',
+
+            '`$gifop` - operations on indexed GIFs\n'
+            '  stage 2\n'
+            '  arguments:\n'
+            '      - optional literal _reverse_ <literal>: reverses the GIF\n'
+            '      - optional literal _append_ <literal>: (applies if _reverse_ is provided) appends the reverse to the end of original if provided\n'
+            '      - optional literal _replace_ <literal>: replaces the original in the index if provided\n'
+            '      - optional mixed literal _speed {speed}_ (takes a float modifier _speed_) <literal>: modifies the speed of the GIF\n'
+            '      - optional mixed literal _skip {value} <ti|fr|%>_ (takes an int modifier _value_) <literal>: skips the provided {value} units from the start\n'
+            '      - optional mixed literal _early {value} <ti|fr|%> (takes an int modifier _value_) <literal>: cuts off the provided {value} units from the end\n'
+            '  short forms:\n'
+            '      None\n'
+            '  document types:\n'
+            '      GIFs\n'
+            '  further notes:\n'
+            '      operation order is (first to last):\n'
+            '          skip|early, reverse, speed\n'
         ]
         for i in index:
             update.message.reply_text(
