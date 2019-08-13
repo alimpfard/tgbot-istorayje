@@ -339,9 +339,11 @@ class IstorayjeBot:
                     continue
                 msgid = None
                 try:
+                    xrep = BytesIO(res)
+                    xrep.name = 'gifopd.mp4'
                     msgid = self.updater.bot.send_animation(
                         doc['response_id'][1],
-                        BytesIO(res)
+                        xrep
                     ).message_id
                 except Exception as e:
                     self.updater.bot.edit_message_text(
