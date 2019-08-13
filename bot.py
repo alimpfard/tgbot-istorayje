@@ -371,8 +371,8 @@ class IstorayjeBot:
                 else:
                     document = self.db.db.storage.find_one({
                         '$and': [
-                            {'user_id': {'$in': doc['users']}}, 
-                            {'$not': 
+                            {'user_id': {'$in': doc['users']}},
+                            {'$not':
                                 {'$and': [
                                     {f'collection.{p[0]}.index.{p[1]}.id': None} for p in insps
                                 ]}
@@ -552,7 +552,7 @@ class IstorayjeBot:
                 synsets = set(sum((wn.synsets(word) for word in words), []))
                 for depth in range(options['hypernym-depth']):
                     synsets.update([hyp for syn in synsets for hyp in syn.hypernyms()])
-                
+
                 if options['hyponyms']:
                     synsets.update([hyp for syn in synsets for hyp in syn.hyponyms()])
                 try:
@@ -858,7 +858,7 @@ class IstorayjeBot:
                             has_instant = True
                             updateop.update(rtag.generate(collections=collections, message=msg, bot=self, set=reset, add=add, remove=remove))
                             continue
-                        
+
                         elif isinstance(rtag, list):
                             ftags.update(rtag)
                             continue
@@ -1175,7 +1175,7 @@ class IstorayjeBot:
                 )
                 return
             query = self.process_search_query_further(query)
-            
+
             colls = list((x['index']['id'], x['index']['tags'], x['index'].get('caption', None), x['index'].get('cache_stale', False)) for x in
                          self.db.db.storage.aggregate([
                              {'$match': {
@@ -1203,7 +1203,7 @@ class IstorayjeBot:
                 id=uuid4(),
                 title='>> ' +
                 '|'.join((" ".join(q) for q in (query or [['Your Recent Selections']]))),
-    
+
                 input_message_content=InputTextMessageContent(
                     'Search for `' +
                     '|'.join(' '.join(q) for q in query) + '\' and more~' if len(query) else 'Yes, these are your recents'
@@ -1458,7 +1458,7 @@ class IstorayjeBot:
             'The default _minimum accepted accuracy_ is 60%, and *commas have to be escaped in captions*\n',
             parse_mode=ParseMode.MARKDOWN
         )
-    
+
     def help_magics(self, bot, update):
         index = [
             'Magic Tags Index\n'
@@ -1522,7 +1522,7 @@ class IstorayjeBot:
             '      - optional literal _replace_ <literal>: replaces the original in the index if provided\n'
             '      - optional mixed literal _speed {speed}_ (takes a float modifier _speed_) <literal>: modifies the speed of the GIF\n'
             '      - optional mixed literal _skip {value} <ti|fr|%>_ (takes an int modifier _value_) <literal>: skips the provided {value} units from the start\n'
-            '      - optional mixed literal _early {value} <ti|fr|%> (takes an int modifier _value_) <literal>: cuts off the provided {value} units from the end\n'
+            '      - optional mixed literal _early {value} <ti|fr|%>_ (takes an int modifier _value_) <literal>: cuts off the provided {value} units from the end\n'
             '  short forms:\n'
             '      None\n'
             '  document types:\n'
