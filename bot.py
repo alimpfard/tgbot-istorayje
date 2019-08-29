@@ -360,7 +360,7 @@ class IstorayjeBot:
                     {'$match': {'index.id': x[1]}},
                     {'$project': {'index': '$idx'}}
                 ]))
-                if doc['replace']:
+                if doc.get('replace', False):
                     ins = {'$set': {f'collection.{p[0]}.index.{p[1]}.id': msgid for p in insps}}
                     self.db.db.storage.update_many({'user_id': {'$in': doc['users']}}, ins)
                     self.updater.bot.edit_message_text(
@@ -571,6 +571,7 @@ class IstorayjeBot:
                     'early': None,
                     'append': None,
                     'replace': None,
+                    'animate': [],
                 }
                 for opt in targs:
                     if opt == 'reverse':
@@ -588,6 +589,51 @@ class IstorayjeBot:
                             value, unit, *_ = opt[len(op):].strip().split(' ')
                             print(repr(opt[len(op):]), repr(value), repr(unit))
                             operations[op] = {'value': int(value), 'unit': unit}
+                        elif opt.startswith('animate '):
+                            op = 'animate'
+                            frame, funit = 0, 'fr'
+                            length, lunit = 1, 'fr'
+                            effect = None
+                            dx, dy = 0, 0
+                            # animate frame:[number]/[unit] length:[number]/[unit] effect:[name] dx:[number] dy:[number]
+                            asv = opt[8:].split(' ')
+                            for optv in asv:
+                                if ':' not in optv:
+                                    continue
+                                k,v = optv.split(':', 1)
+                                v = v.strip()
+                                if k == 'frame':
+                                    v, funit = v.split('/', 1)
+                                    frame = float(v)
+                                elif k == 'length':
+                                    v, lunit = v.split('/', 1)
+                                    length = float(v)
+                                elif k == 'effect':
+                                    effect = v
+                                elif k == 'dx':
+                                    dx = float(v)
+                                elif k == 'dy':
+                                    dy = float(v)
+                            if not effect:
+                                continue
+                            operations[op].append({
+                                'frame': {
+                                    'start': {
+                                        'value': frame,
+                                        'unit': funit
+                                    },
+                                    'length': {
+                                        'value': length,
+                                        'unit': lunit
+                                    }
+                                },
+                                'effect': {
+                                    'name': effect,
+                                    'dx': dx,
+                                    'dy': dy
+                                }
+                            })
+
                 if not any(operations[x] for x in operations) and operations['speed'] != 1:
                     return None
                 doc = get_any(message, ['document'])
