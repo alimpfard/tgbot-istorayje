@@ -373,7 +373,6 @@ class IstorayjeBot:
                         '$and': [
                             {'user_id': {'$in': doc['users']}},
                             *[{f'collection.{p[0]}.index.{p[1]}.id': {'$not': None}} for p in insps]
-                            }
                         ]
                     })
                     if not document:
