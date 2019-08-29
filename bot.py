@@ -326,7 +326,7 @@ class IstorayjeBot:
             elif doc['service'] == 'gifop':
                 res = process_gifops(
                     url=self.updater.bot.get_file(doc['fileid'])._get_encoded_url(),
-                    ops={x:doc[x] for x in ['reverse', 'speed', 'skip', 'early', 'append'] if x in doc},
+                    ops={x:doc[x] for x in ['reverse', 'speed', 'skip', 'early', 'append', 'animate'] if x in doc},
                     format=doc['format']
                 )
                 resp = doc['response_id']
@@ -637,12 +637,15 @@ class IstorayjeBot:
                             })
                 print(operations)
                 if not any(operations[x] for x in operations):
+                    print ('nothing to do with this')
                     return None
                 doc = get_any(message, ['document'])
                 if not doc:
+                    print ('no document for this')
                     return None
                 mime = doc.mime_type
                 if not mime or not any(x in mime for x in ['gif', 'mp4']):
+                    print('not a gif')
                     return None
                 # it's a GIF
                 operations['format'] = 'gif' if 'gif' in mime else 'mp4'
