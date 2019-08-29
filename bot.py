@@ -615,7 +615,7 @@ class IstorayjeBot:
                                     dx = float(v)
                                 elif k == 'dy':
                                     dy = float(v)
-                            print('animate', effect, dx, dy, length, start)
+                            print('animate', effect, dx, dy, length, frame)
                             if not effect:
                                 continue
                             operations[op].append({
@@ -635,7 +635,7 @@ class IstorayjeBot:
                                     'dy': dy
                                 }
                             })
-
+                print(operations)
                 if not any(operations[x] for x in operations) and operations['speed'] != 1:
                     return None
                 doc = get_any(message, ['document'])
