@@ -372,10 +372,7 @@ class IstorayjeBot:
                     document = self.db.db.storage.find_one({
                         '$and': [
                             {'user_id': {'$in': doc['users']}},
-                            {'$not':
-                                {'$and': [
-                                    {f'collection.{p[0]}.index.{p[1]}.id': None} for p in insps
-                                ]}
+                            *[{f'collection.{p[0]}.index.{p[1]}.id': {'$not': None}} for p in insps]
                             }
                         ]
                     })
