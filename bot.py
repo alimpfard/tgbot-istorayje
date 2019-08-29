@@ -375,6 +375,13 @@ class IstorayjeBot:
                             *[{f'collection.{p[0]}.index.{p[1]}.id': {'$not': None}} for p in insps]
                         ]
                     })
+                    if not insps:
+                        self.updater.bot.edit_message_text(
+                            f'Completed.\nWarning: nowhere to insert, new gif is unregistered',
+                            char_id=resp[1],
+                            message_id=resp[0],
+                        )
+                        continue
                     if not document:
                         self.updater.bot.edit_message_text(
                             f'Failed: not a single user whom has indexed the original message found',
