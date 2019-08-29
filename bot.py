@@ -636,7 +636,7 @@ class IstorayjeBot:
                                 }
                             })
                 print(operations)
-                if not any(operations[x] for x in operations) and operations['speed'] != 1:
+                if not any(operations[x] for x in operations):
                     return None
                 doc = get_any(message, ['document'])
                 if not doc:
