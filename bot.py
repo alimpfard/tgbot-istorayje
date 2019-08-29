@@ -590,6 +590,7 @@ class IstorayjeBot:
                             print(repr(opt[len(op):]), repr(value), repr(unit))
                             operations[op] = {'value': int(value), 'unit': unit}
                         elif opt.startswith('animate '):
+                            print('animate ::', opt)
                             op = 'animate'
                             frame, funit = 0, 'fr'
                             length, lunit = 1, 'fr'
@@ -614,6 +615,7 @@ class IstorayjeBot:
                                     dx = float(v)
                                 elif k == 'dy':
                                     dy = float(v)
+                            print('animate', effect, dx, dy, length, start)
                             if not effect:
                                 continue
                             operations[op].append({
