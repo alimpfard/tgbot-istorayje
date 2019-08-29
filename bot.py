@@ -591,10 +591,13 @@ class IstorayjeBot:
                             frame, funit = 0, 'fr'
                             length, lunit = 1, 'fr'
                             effect = None
+                            mux = False
                             dx, dy = 0, 0
-                            # animate frame:[number]/[unit] length:[number]/[unit] effect:[name] dx:[number] dy:[number]
+                            # animate frame:[number]/[unit] length:[number]/[unit] effect:[name] dx:[number] dy:[number] (multiplex)
                             asv = opt[8:].split(' ')
                             for optv in asv:
+                                if optv == 'multiplex':
+                                    mux = True
                                 if ':' not in optv:
                                     continue
                                 k,v = optv.split(':', 1)
@@ -627,6 +630,7 @@ class IstorayjeBot:
                                 },
                                 'effect': {
                                     'name': effect,
+                                    'multiplex': mux,
                                     'dx': dx,
                                     'dy': dy
                                 }
