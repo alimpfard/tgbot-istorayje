@@ -449,6 +449,13 @@ class IstorayjeBot:
         return result
 
     def handle_magic_tags(self, tag: str, message: object, insertion_paths: list, early: bool, users: list):
+        def aparse(st):
+            ss = st.split('/')
+            ss = [float(s) for ssv in ss for s in ssv.split(';')]
+            if len(ss) == 1:
+                return ss[0]
+            return ss
+
         tag, targs = tag
         if tag.startswith('$'):
             tag = tag[1:]
@@ -628,7 +635,7 @@ class IstorayjeBot:
                             if not effect:
                                 continue
                             if effect == 'distort':
-                                extra['arguments'] = [int(x.strip()) for x in extra.get('arguments', '').split(';')]
+                                extra['arguments'] = aparse(extra.get('arguments', ''))
                             operations[op].append({
                                 'frame': {
                                     'start': {
