@@ -628,7 +628,7 @@ class IstorayjeBot:
                             if not effect:
                                 continue
                             if effect == 'distort':
-                                extra['arguments'] = [int(x.trim()) for x in extra.get('arguments', '').split(',')]
+                                extra['arguments'] = [int(x.strip()) for x in extra.get('arguments', '').split(';')]
                             operations[op].append({
                                 'frame': {
                                     'start': {
