@@ -451,7 +451,7 @@ class IstorayjeBot:
     def handle_magic_tags(self, tag: str, message: object, insertion_paths: list, early: bool, users: list):
         def aparse(st):
             ss = st.split('/')
-            ss = [float(s) for ssv in ss for s in ssv.split(';')]
+            ss = [float(s.strip()) for ssv in ss for s in ssv.split(';')]
             if len(ss) == 1:
                 return ss[0]
             return ss
