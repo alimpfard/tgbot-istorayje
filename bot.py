@@ -378,7 +378,7 @@ class IstorayjeBot:
                     if not insps:
                         self.updater.bot.edit_message_text(
                             f'Completed.\nWarning: nowhere to insert, new gif is unregistered',
-                            char_id=resp[1],
+                            chat_id=resp[1],
                             message_id=resp[0],
                         )
                         continue
