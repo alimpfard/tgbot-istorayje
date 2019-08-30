@@ -600,8 +600,9 @@ class IstorayjeBot:
                             effect = None
                             mux = False
                             dx, dy = 0, 0
-                            # animate frame:[number]/[unit] length:[number]/[unit] effect:[name] dx:[number] dy:[number] (multiplex)
+                            # animate frame:[number]/[unit] length:[number]/[unit] effect:[name] dx:[number] dy:[number] (multiplex) (word:word)
                             asv = opt[8:].split(' ')
+                            extra = {}
                             for optv in asv:
                                 if optv == 'multiplex':
                                     mux = True
@@ -621,9 +622,13 @@ class IstorayjeBot:
                                     dx = float(v)
                                 elif k == 'dy':
                                     dy = float(v)
-                            print('animate', effect, dx, dy, length, frame)
+                                else:
+                                    extra[k] = v
+                            print('animate', effect, dx, dy, length, frame, extra)
                             if not effect:
                                 continue
+                            if effect == 'distort':
+                                extra['arguments'] = [int(x.trim()) for x in extra.get('arguments', '').split(',')]
                             operations[op].append({
                                 'frame': {
                                     'start': {
@@ -639,7 +644,8 @@ class IstorayjeBot:
                                     'name': effect,
                                     'multiplex': mux,
                                     'dx': dx,
-                                    'dy': dy
+                                    'dy': dy,
+                                    **extra
                                 }
                             })
                 print(operations)
