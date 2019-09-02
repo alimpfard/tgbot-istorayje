@@ -705,11 +705,11 @@ class IstorayjeBot:
                 tagbuf = ''
                 argbuf = ''
                 args = []
-            elif not escaped and c in ['(', '{', '<']:
+            elif not escaped and c in ['(', '{']:
                 if open_paren[c] == 0:
                     argbuf = ''
                 open_paren[c] += 1
-            elif not escaped and c in [')', '}', '>']:
+            elif not escaped and c in [')', '}']:
                 if open_paren[rev[c]] > 1:
                     open_paren[rev[c]] -= 1
                     argbuf += ')'
