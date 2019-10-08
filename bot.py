@@ -1166,7 +1166,7 @@ class IstorayjeBot:
         except:
             try:
                 document = get_any(message, ['document', 'animation', 'audio', 'video', 'photo'])
-                assert (document is not None)
+                assert (document is not None and [] != document)
                 mime = None
                 if isinstance(document, list):
                     # photo list, we're gonna take a random one for fun
@@ -1212,7 +1212,7 @@ class IstorayjeBot:
                     return self.clone_messaage_with_data(data, tags)
                 except:
                     try:
-                        voice = get_any(document, ['voice', 'audio'])
+                        voice = get_any(message, ['voice', 'audio'])
                         assert (voice is not None)
                         print('> is voice')
                         data = {
