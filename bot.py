@@ -7,7 +7,8 @@ from telegram import (
     InlineQueryResultArticle, ParseMode,
     InputTextMessageContent,
     InlineQueryResultCachedDocument, InlineQueryResultCachedPhoto, InlineQueryResultCachedGif,
-    InlineQueryResultCachedMpeg4Gif, InlineQueryResultCachedSticker, Sticker
+    InlineQueryResultCachedMpeg4Gif, InlineQueryResultCachedSticker, Sticker,
+    InlineQueryResultCachedVoice,
 )
 from telegram.ext import ChosenInlineResultHandler
 # from googlecloud import getCloudAPIDetails
@@ -1137,6 +1138,13 @@ class IstorayjeBot:
                 data['file_id'],
                 caption=data.get('caption', None)
             )
+        elif ty == 'voice':
+            return InlineQueryResultCachedVoice(
+                data['msg_id'],
+                '> ' + ', '.join(tags) + ' (' + str(data['msg_id']) + ')',
+                data['file_id'],
+                caption=data.get('caption', None)
+            )
         else:
             print('unhandled msg type', ty, 'for message', data)
             return None
@@ -1182,6 +1190,8 @@ class IstorayjeBot:
                     data['type'] = 'gif'
                 elif 'image' in mime:
                     data['type'] = 'img'
+                elif 'audio' in mime:
+                    data['type'] = 'voice'
                 else:
                     data['type'] = 'doc'
                 self.db.db.message_cache.find_one_and_replace({'$and': [{'msg_id': id}, {'chatid': chid}]}, {k:v for k,v in data.items() if k != 'caption'}, upsert=True)
