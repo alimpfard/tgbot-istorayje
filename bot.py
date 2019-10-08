@@ -1146,6 +1146,13 @@ class IstorayjeBot:
                 '> ' + ', '.join(tags) + ' (' + str(data['msg_id']) + ')',
                 caption=data.get('caption', None)
             )
+        elif ty == 'audio':
+            return InlineQueryResultCachedAudio(
+                data['msg_id'],
+                data['file_id'],
+                '> ' + ', '.join(tags) + ' (' + str(data['msg_id']) + ')',
+                caption=data.get('caption', None)
+            )
         else:
             print('unhandled msg type', ty, 'for message', data)
             return None
@@ -1192,7 +1199,7 @@ class IstorayjeBot:
                 elif 'image' in mime:
                     data['type'] = 'img'
                 elif 'audio' in mime:
-                    data['type'] = 'voice'
+                    data['type'] = 'audio'
                 else:
                     data['type'] = 'doc'
                 self.db.db.message_cache.find_one_and_replace({'$and': [{'msg_id': id}, {'chatid': chid}]}, {k:v for k,v in data.items() if k != 'caption'}, upsert=True)
