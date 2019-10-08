@@ -1142,8 +1142,8 @@ class IstorayjeBot:
         elif ty == 'voice':
             return InlineQueryResultCachedVoice(
                 data['msg_id'],
-                '> ' + ', '.join(tags) + ' (' + str(data['msg_id']) + ')',
                 data['file_id'],
+                '> ' + ', '.join(tags) + ' (' + str(data['msg_id']) + ')',
                 caption=data.get('caption', None)
             )
         else:
