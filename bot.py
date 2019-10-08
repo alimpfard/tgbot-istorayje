@@ -1165,7 +1165,7 @@ class IstorayjeBot:
             return self.clone_messaage_with_data(data, tags)
         except:
             try:
-                document = get_any(message, ['document', 'voice', 'animation', 'audio', 'video', 'photo'])
+                document = get_any(message, ['document', 'animation', 'audio', 'video', 'photo'])
                 assert (document is not None)
                 mime = None
                 if isinstance(document, list):
@@ -1210,10 +1210,24 @@ class IstorayjeBot:
                     }
                     self.db.db.message_cache.find_one_and_replace({'$and': [{'msg_id': data['msg_id']}, {'chatid': data['chatid']}]}, {k:v for k,v in data.items() if k != 'caption'}, upsert=True)
                     return self.clone_messaage_with_data(data, tags)
-                except Exception as e:
-                    traceback.print_exc()
-                    print('exception occured while processing', message, 'with tags', tags)
-                    return None
+                except:
+                    try:
+                        voice = get_any(document, ['voice', 'audio'])
+                        assert (voice is not None)
+                        print('> is voice')
+                        data = {
+                            'type': 'voice',
+                            'file_id': voice.file_id,
+                            'chatid': chid,
+                            'msg_id': id,
+                            'xxhash': xxhash.xxh64(self.updater.bot.get_file(file_id=voice.file_id).download_as_bytearray()).digest(),
+                        }
+                        self.db.db.message_cache.find_one_and_replace({'$and': [{'msg_id': id}, {'chatid': chid}]}, {k:v for k,v in data.items() if k != 'caption'}, upsert=True)
+                        return self.clone_messaage_with_data(data, tags)
+                    except Exception as e:
+                        traceback.print_exc()
+                        print('exception occured while processing', message, 'with tags', tags)
+                        return None
         return None
 
     def process_search_query_further(self, query: list):
