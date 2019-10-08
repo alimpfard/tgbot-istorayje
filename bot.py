@@ -1097,6 +1097,7 @@ class IstorayjeBot:
 
     def clone_messaage_with_data(self, data, tags):
         ty = data['type']
+        print('> got some', ty, ':', data)
         if ty == 'text':
             return InlineQueryResultArticle(
                 id=data['msg_id'],
