@@ -1270,7 +1270,13 @@ class IstorayjeBot:
             if coll == 'anilist':
                 if ireqs == 'ql':
                     # raw query
-                    pass
+                    update.inline_query.answer([
+                        InlineQueryResultArticle(
+                            id=uuid4(),
+                            title="Raw request results for " + query,
+                            input_message_content=InputTextMessageContent(json.dumps(aniquery(query)))
+                        )
+                    ])
                 elif ireqs == '':
                     # simple query
                     update.inline_query.answer(squery_render(data['query']))

@@ -26,7 +26,7 @@ def strip_tags(html):
 
 url = 'https://graphql.anilist.co'
 
-def query(qry: str, vars: dict):
+def aniquery(qry: str, vars: dict):
     return requests.post(url, json={'query': qry, 'variables': vars}).json()
 
 def squery_render(terms: str):
@@ -82,7 +82,7 @@ def squery_render(terms: str):
     return responses
 
 def simple_query(terms: str):
-    return query(
+    return aniquery(
         '''
         query($page: Int, $perPage: Int, $search: String) {
             Page (page: $page, perPage: $perPage) {
