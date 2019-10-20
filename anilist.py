@@ -10,7 +10,9 @@ def query(qry: str, vars: dict):
     return requests.post(url, json={'query': qry, 'variables': vars}).json()
 
 def squery_render(terms: str):
-    media = simple_query(terms)['data']['Page']['media']
+    media = simple_query(terms)
+    print('Got result', media)
+    media = media['data']['Page']['media']
     responses = [
         InlineQueryResultArticle(
             id=uuid4(),
