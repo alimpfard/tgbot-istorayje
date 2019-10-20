@@ -57,7 +57,7 @@ def squery_render(terms: str):
         responses.append(
             InlineQueryResultArticle(
                 id=uuid4(),
-                title=(lambda t: f"{'[🌶] ' if m['isAdult'] else ''}{t['english'] or t['romaji']} ({t['native']})")(m['title']),
+                title=(lambda t: f"{'[🌶] ' if m['isAdult'] else ''}[{m['format']}] {t['english'] or t['romaji']}")(m['title']),
                 thumb_url=m['coverImage']['medium'],
                 input_message_content=InputTextMessageContent(
                     (f"<b>{m['title']['english'] or m['title']['romaji']} ({m['startDate']['year']})</b>\n" +
