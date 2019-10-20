@@ -45,7 +45,7 @@ def squery_render(terms: str):
             return '???'
         if t < 3600:
             return 'about an hour or so'
-        return f'{t//(3600/24)} days'
+        return f'{int(t/(3600*24))} days'
 
     def nextEpisode(episodes: list):
         eps, time = None, None
@@ -54,7 +54,7 @@ def squery_render(terms: str):
                 eps = ex['episode']
                 time = ex['timeUntilAiring']
                 break
-            
+
         return f"{eps or '???'} in {timefmt(time)}"
 
     for m in media:
