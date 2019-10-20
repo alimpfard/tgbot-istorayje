@@ -1285,7 +1285,7 @@ class IstorayjeBot:
                         return
                     q0,q1 = match.group(1, 2)
 
-                    coll = self.db.client[f'temp_{update.from_user.id}']
+                    coll = self.db.client[f'temp_{update.inline_query.from_user.id}']
                     db = coll['temp']
                     db.insert_one(aniquery(q0, {}))
                     res = db.aggregate(json.loads(q1))
