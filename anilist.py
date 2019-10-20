@@ -57,7 +57,7 @@ def squery_render(terms: str):
 def simple_query(terms: str):
     return query(
         '''
-        query($id: Int, $page: Int, $perPage: Int, $search: String) {
+        query($page: Int, $perPage: Int, $search: String) {
             Page (page: $page, perPage: $perPage) {
                 media(search: $search) {
                     id
