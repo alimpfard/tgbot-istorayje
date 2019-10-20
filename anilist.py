@@ -57,7 +57,7 @@ def squery_render(terms: str):
                 time = ex['timeUntilAiring']
                 break
 
-        return f"{eps or '???'} in {timefmt(time)}"
+        return f"episode {eps or '???'} in {timefmt(time)}"
 
     for m in media:
         responses.append(
