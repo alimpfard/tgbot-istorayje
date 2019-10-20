@@ -33,6 +33,7 @@ from datetime import timedelta
 from nltk.corpus import stopwords
 from nltk.corpus import wordnet as wn
 from nltk.stem import PorterStemmer
+from bson.json_util import dumps
 
 
 def get_any(obj, lst):
@@ -1293,7 +1294,7 @@ class IstorayjeBot:
                         InlineQueryResultArticle(
                             id=uuid4(),
                             title="Aggregate request results for " + q0,
-                            input_message_content=InputTextMessageContent(json.dumps(list(res)))
+                            input_message_content=InputTextMessageContent(dumps(list(res)))
                         )
                     ])
                     db.drop()
