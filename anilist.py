@@ -72,7 +72,8 @@ def qquery_render(s):
                     (f"<b>{m['title']['english'] or m['title']['romaji']} ({m['startDate']['year']})</b>\n" +
                      f"Original name: {m['title']['native']}\n" +
                      f"Status: {m['status']}\n" +
-                     f"Genres: {', '.join(m['genres'])}\n" +
+                     f"Genres: {', '.join(m.get('genres', None) or ['Nothing'])}\n" +
+                     f"Tags: {', '.join(m.get('tags', None) or ['Nothing'])}\n" +
                      f"Total episode count: {m['episodes']}\n" +
                      (f"Next episode: {nextEpisode(m['airingSchedule']['nodes'])}\n" if m['status'] == 'RELEASING' else '') +
                      '\nHere be dragons\n' +
@@ -125,8 +126,8 @@ def iquery_render(id):
                     (f"<b>{m['title']['english'] or m['title']['romaji']} ({m['startDate']['year']})</b>\n" +
                      f"Original name: {m['title']['native']}\n" +
                      f"Status: {m['status']}\n" +
-                     f"Genres: {', '.join(m['genres'] or ['Nothing'])}\n" +
-                     f"Tags: {', '.join(m['tags'] or ['Nothing'])}\n" +
+                     f"Genres: {', '.join(m.get('genres', None) or ['Nothing'])}\n" +
+                     f"Tags: {', '.join(m.get('tags', None) or ['Nothing'])}\n" +
                      f"Total episode count: {m['episodes']}\n" +
                      (f"Next episode: {nextEpisode(m['airingSchedule']['nodes'])}\n" if m['status'] == 'RELEASING' else '') +
                      '\nHere be dragons\n' +
@@ -179,7 +180,8 @@ def squery_render(terms: str):
                     (f"<b>{m['title']['english'] or m['title']['romaji']} ({m['startDate']['year']})</b>\n" +
                      f"Original name: {m['title']['native']}\n" +
                      f"Status: {m['status']}\n" +
-                     f"Genres: {', '.join(m['genres'])}\n" +
+                     f"Genres: {', '.join(m.get('genres', None) or ['Nothing'])}\n" +
+                     f"Tags: {', '.join(m.get('tags', None) or ['Nothing'])}\n" +
                      f"Total episode count: {m['episodes']}\n" +
                      (f"Next episode: {nextEpisode(m['airingSchedule']['nodes'])}\n" if m['status'] == 'RELEASING' else '') +
                      '\nHere be dragons\n' +
