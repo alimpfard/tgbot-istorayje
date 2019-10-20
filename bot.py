@@ -1293,7 +1293,7 @@ class IstorayjeBot:
                         InlineQueryResultArticle(
                             id=uuid4(),
                             title="Aggregate request results for " + q0,
-                            input_message_content=InputTextMessageContent(json.dumps(res))
+                            input_message_content=InputTextMessageContent(json.dumps(list(res)))
                         )
                     ])
                     db.drop()
