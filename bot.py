@@ -15,7 +15,7 @@ from telegram.ext import ChosenInlineResultHandler
 from googleimgsearch import searchGoogleImages
 from trace import getTraceAPIDetails
 from extern import pke_tagify, store_image, get_some_frame, process_gifops
-from anilist import anilist
+from anilist import *
 
 from db import DB
 import re
@@ -1273,7 +1273,7 @@ class IstorayjeBot:
                     pass
                 elif ireqs == '':
                     # simple query
-                    update.inline_query.answer(anilist.squery_render(data['query']))
+                    update.inline_query.answer(squery_render(data['query']))
                 else:
                     raise Exception(f'Arguments to source {coll} not understood ({ireqs})')
             else:
