@@ -35,7 +35,7 @@ def qquery_render(s):
     terms=id
     media = simple_query(_query=s)
     print('Got result', media)
-    media = media['data']['media']
+    media = media['data']['Media']
     responses = [
         InlineQueryResultArticle(
             id=uuid4(),
@@ -88,7 +88,7 @@ def iquery_render(id):
     terms=id
     media = simple_query(_query=f'id:{id}')
     print('Got result', media)
-    media = media['data']['media']
+    media = media['data']['Media']
     responses = [
         InlineQueryResultArticle(
             id=uuid4(),
