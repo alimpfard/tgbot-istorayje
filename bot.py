@@ -15,6 +15,7 @@ from telegram.ext import ChosenInlineResultHandler
 from googleimgsearch import searchGoogleImages
 from trace import getTraceAPIDetails
 from extern import pke_tagify, store_image, get_some_frame, process_gifops
+from anilist import anilist
 
 from db import DB
 import re
