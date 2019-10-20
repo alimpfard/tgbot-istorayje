@@ -20,7 +20,9 @@ class MLStripper(HTMLParser):
 def strip_tags(html):
     s = MLStripper()
     s.feed(html)
-    return s.get_data()
+    x = s.get_data()
+    print('stripped:', x)
+    return x.strip()
 
 url = 'https://graphql.anilist.co'
 
@@ -64,7 +66,7 @@ def squery_render(terms: str):
                      f"Genres: {', '.join(m['genres'])}\n" +
                      f"Total episode count: {m['episodes']}\n" +
                      (f"Next episode: {nextEpisode(m['airingSchedule']['nodes'])}\n" if m['status'] == 'RELEASING' else '') +
-                     '\n<Here be dragons>\n' +
+                     '\nHere be dragons\n' +
                      f"Description: {strip_tags(m['description'])}\n" +
                      f"<a href=\"{m['coverImage']['large']}\"> Cover Image </a>"
                     ),
