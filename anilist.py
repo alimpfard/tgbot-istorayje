@@ -73,7 +73,7 @@ def qquery_render(s):
                      f"Original name: {m['title']['native']}\n" +
                      f"Status: {m['status']}\n" +
                      f"Genres: {', '.join(m.get('genres', None) or ['Nothing'])}\n" +
-                     f"Tags: {', '.join(m.get('tags', None) or ['Nothing'])}\n" +
+                     f"Tags: {', '.join(i['name'] for i in (m.get('tags', []))) or 'Nothing'}\n" +
                      f"Total episode count: {m['episodes']}\n" +
                      (f"Next episode: {nextEpisode(m['airingSchedule']['nodes'])}\n" if m['status'] == 'RELEASING' else '') +
                      '\nHere be dragons\n' +
@@ -127,7 +127,7 @@ def iquery_render(id):
                      f"Original name: {m['title']['native']}\n" +
                      f"Status: {m['status']}\n" +
                      f"Genres: {', '.join(m.get('genres', None) or ['Nothing'])}\n" +
-                     f"Tags: {', '.join(m.get('tags', None) or ['Nothing'])}\n" +
+                     f"Tags: {', '.join(i['name'] for i in (m.get('tags', []))) or 'Nothing'}\n" +
                      f"Total episode count: {m['episodes']}\n" +
                      (f"Next episode: {nextEpisode(m['airingSchedule']['nodes'])}\n" if m['status'] == 'RELEASING' else '') +
                      '\nHere be dragons\n' +
@@ -181,7 +181,7 @@ def squery_render(terms: str):
                      f"Original name: {m['title']['native']}\n" +
                      f"Status: {m['status']}\n" +
                      f"Genres: {', '.join(m.get('genres', None) or ['Nothing'])}\n" +
-                     f"Tags: {', '.join(m.get('tags', None) or ['Nothing'])}\n" +
+                     f"Tags: {', '.join(i['name'] for i in (m.get('tags', []))) or 'Nothing'}\n" +
                      f"Total episode count: {m['episodes']}\n" +
                      (f"Next episode: {nextEpisode(m['airingSchedule']['nodes'])}\n" if m['status'] == 'RELEASING' else '') +
                      '\nHere be dragons\n' +
