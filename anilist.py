@@ -3,9 +3,28 @@ from telegram import (
     InlineQueryResultArticle, ParseMode, InputTextMessageContent
 )
 from uuid import uuid4
+from html.parser import HTMLParser
+
+
+class MLStripper(HTMLParser):
+    def __init__(self):
+        self.reset()
+        self.strict = False
+        self.convert_charrefs= True
+        self.fed = []
+    def handle_data(self, d):
+        self.fed.append(d)
+    def get_data(self):
+        return ''.join(self.fed)
 
 def strip_tags(html):
-    return html.replace('<br />', '').replace('<br>', '').replace('</br>', '')
+    if not html:
+        return '[nothing here]'
+    s = MLStripper()
+    s.feed(html)
+    x = s.get_data()
+    print('stripped:', x)
+    return x.strip()
 
 url = 'https://graphql.anilist.co'
 
