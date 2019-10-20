@@ -4,7 +4,7 @@ from telegram import (
 )
 from uuid import uuid4
 
-url = 'https://graphql.co'
+url = 'https://graphql.anilist.co'
 
 def query(qry: str, vars: dict):
     return requests.post(url, json={'query': qry, 'variables': vars}).json()
