@@ -47,9 +47,8 @@ def squery_render(terms: str):
                      f"Total episode count: {m['episodes']}\n" +
                      (f"Next episode: {nextEpisode(m['airingSchedule'])}\n" if m['status'] == 'AIRING' else '') +
                      f"Cover image: {m['coverImage']['large']}"
-                    )
-                ),
-                reply_markup='HTML'
+                    ),
+                    parse_mode='HTML')
             )
         )
     return responses
