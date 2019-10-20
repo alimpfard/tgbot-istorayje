@@ -1265,6 +1265,7 @@ class IstorayjeBot:
         try:
             coll, *ireqs = data['source'].split(':')
             ireqs = ':'.join(ireqs)
+            query = data['query']
             if coll == 'anilist':
                 if ireqs == 'ql':
                     # raw query
