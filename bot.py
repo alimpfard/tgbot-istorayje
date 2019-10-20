@@ -1271,7 +1271,7 @@ class IstorayjeBot:
                     pass
                 elif ireqs == '':
                     # simple query
-                    results = anilist.squery_render(data['query'])
+                    update.inline_query.answer(anilist.squery_render(data['query']))
                 else:
                     raise Exception(f'Arguments to source {coll} not understood ({ireqs})')
             else:
@@ -1293,7 +1293,7 @@ class IstorayjeBot:
             coll, query, extra = self.parse_query(update.inline_query.query)
             if coll.startswith('@'):
                 # external sources
-                return external_source_handler({'source': coll[1:], 'query': ' '.join(query[0])}, bot, update, user_data, chat_data)
+                return self.external_source_handler({'source': coll[1:], 'query': ' '.join(query[0])}, bot, update, user_data, chat_data)
             fcaption = extra.get('caption', None)
             print(update.inline_query.query, '->', repr(coll), repr(query), extra)
             if not coll or coll == '':
