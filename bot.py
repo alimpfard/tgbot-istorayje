@@ -1300,6 +1300,8 @@ class IstorayjeBot:
                     db.drop()
                 elif ireqs == 'id':
                     update.inline_query.answer(iquery_render(query))
+                elif ireqs == 'one':
+                    update.inline_query.answer(qquery_render(query))
                 elif ireqs == '':
                     # simple query
                     update.inline_query.answer(squery_render(data['query']))
