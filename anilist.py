@@ -45,6 +45,8 @@ def squery_render(terms: str):
             return '???'
         if t < 3600:
             return 'about an hour or so'
+        if t < 24*3600:
+            return f'about {t/3600} hours or so'
         return f'{int(t/(3600*24))} days'
 
     def nextEpisode(episodes: list):
