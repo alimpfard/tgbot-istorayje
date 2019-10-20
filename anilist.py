@@ -46,7 +46,7 @@ def squery_render(terms: str):
                      f"Genres: {', '.join(m['genres'])}\n" +
                      f"Total episode count: {m['episodes']}\n" +
                      (f"Next episode: {nextEpisode(m['airingSchedule'])}\n" if m['status'] == 'RELEASING' else '') +
-                     f"Cover image: {m['coverImage']['large']}"
+                     f"<a href=\"{m['coverImage']['large']}\"> Cover Image </a>"
                     ),
                     parse_mode='HTML')
             )
