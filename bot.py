@@ -1274,7 +1274,7 @@ class IstorayjeBot:
                         InlineQueryResultArticle(
                             id=uuid4(),
                             title="Raw request results for " + query,
-                            input_message_content=InputTextMessageContent(json.dumps(aniquery(query)))
+                            input_message_content=InputTextMessageContent(json.dumps(aniquery(query, {})))
                         )
                     ])
                 elif ireqs == '':
