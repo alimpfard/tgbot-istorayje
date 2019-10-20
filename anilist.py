@@ -19,7 +19,7 @@ class MLStripper(HTMLParser):
 
 def strip_tags(html):
     s = MLStripper()
-    s.feed('<html_>' + html '</html_>')
+    s.feed('<html_>' + html + '</html_>')
     x = s.get_data()
     print('stripped:', x)
     return x.strip()
