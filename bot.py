@@ -1277,6 +1277,26 @@ class IstorayjeBot:
                             input_message_content=InputTextMessageContent(json.dumps(aniquery(query, {})))
                         )
                     ])
+                elif ireqs == 'aggql':
+                    # aggregate query response
+                    # parse query: `query` `aggregate`
+                    match = re.search(r'^\`([^\`]+)\`\s*\`([^\`]+)\`$', query)
+                    if match is None:
+                        return
+                    q0,q1 = match.group(1, 2)
+
+                    coll = self.db.client[f'temp_{update.from_user.id}']
+                    db = coll['temp']
+                    db.insert_one(aniquery(q0, {}))
+                    res = db.aggregate(json.loads(q1))
+                    update.inline_query.answer([
+                        InlineQueryResultArticle(
+                            id=uuid4(),
+                            title="Aggregate request results for " + q0,
+                            input_message_content=InputTextMessageContent(json.dumps(res))
+                        )
+                    ])
+                    db.drop()
                 elif ireqs == '':
                     # simple query
                     update.inline_query.answer(squery_render(data['query']))
