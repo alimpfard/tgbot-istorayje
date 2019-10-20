@@ -174,7 +174,7 @@ def simple_query(terms=None, id=None):
         }
         ''' if id is None else '''
             query {
-                Media(id: {}) {
+                Media(id: ''' + id + ''') {
                     id
                     title {
                         romaji
@@ -203,6 +203,6 @@ def simple_query(terms=None, id=None):
                     }
                 }
             }
-        '''.format(id),
+        ''',
         dict(search=terms, page=1, perPage=5) if id is None else {}
     )
