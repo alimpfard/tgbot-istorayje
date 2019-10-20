@@ -1261,10 +1261,39 @@ class IstorayjeBot:
                     qs.add(tp)
         return qq
 
+    def external_source_handler(self, data: dict, bot, update, user_data=None, chat_data=None):
+        try:
+            coll, *ireqs = data['source'].split(':')
+            ireqs = ':'.join(ireqs)
+            if coll == 'anilist':
+                if ireqs == 'ql':
+                    # raw query
+                    pass
+                elif ireqs == '':
+                    # simple query
+                    results = anilist.squery_render(data['query'])
+                else:
+                    raise Exception(f'Arguments to source {coll} not understood ({ireqs})')
+            else:
+                raise Exception(f'Undefined source {coll}')
+        except Exception as e:
+            print(e)
+            traceback.print_exc()
+            update.inline_query.answer([
+                InlineQueryResultArticle(
+                    id=uuid4(),
+                    title=f'Exception <{e}> occured while processing {query} in external source {coll}',
+                    input_message_content=InputTextMessageContent(
+                        f'allow me to let you in on a secret,\nThis bot is actually dumb\n{e}')
+                )
+            ], cache_time=10)
 
     def handle_query(self, bot, update, user_data=None, chat_data=None):
         try:
             coll, query, extra = self.parse_query(update.inline_query.query)
+            if coll.startswith('@'):
+                # external sources
+                return external_source_handler({'source': coll[1:], 'query': ' '.join(query[0])}, bot, update, user_data, chat_data)
             fcaption = extra.get('caption', None)
             print(update.inline_query.query, '->', repr(coll), repr(query), extra)
             if not coll or coll == '':
