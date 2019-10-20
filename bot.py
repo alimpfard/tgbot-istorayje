@@ -1301,7 +1301,7 @@ class IstorayjeBot:
             coll, query, extra = self.parse_query(update.inline_query.query)
             if coll.startswith('@'):
                 # external sources
-                return self.external_source_handler({'source': coll[1:], 'query': ' '.join(query[0])}, bot, update, user_data, chat_data)
+                return self.external_source_handler({'source': coll[1:], 'query': ' '.join(update.inline_query.query.strip().split(' ')[1:])}, bot, update, user_data, chat_data)
             fcaption = extra.get('caption', None)
             print(update.inline_query.query, '->', repr(coll), repr(query), extra)
             if not coll or coll == '':
