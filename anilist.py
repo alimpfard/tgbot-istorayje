@@ -3,6 +3,24 @@ from telegram import (
     InlineQueryResultArticle, ParseMode, InputTextMessageContent
 )
 from uuid import uuid4
+from html.parser import HTMLParser
+
+
+class MLStripper(HTMLParser):
+    def __init__(self):
+        self.reset()
+        self.strict = False
+        self.convert_charrefs= True
+        self.fed = []
+    def handle_data(self, d):
+        self.fed.append(d)
+    def get_data(self):
+        return ''.join(self.fed)
+
+def strip_tags(html):
+    s = MLStripper()
+    s.feed(html)
+    return s.get_data()
 
 url = 'https://graphql.anilist.co'
 
@@ -47,7 +65,7 @@ def squery_render(terms: str):
                      f"Total episode count: {m['episodes']}\n" +
                      (f"Next episode: {nextEpisode(m['airingSchedule']['nodes'])}\n" if m['status'] == 'RELEASING' else '') +
                      '\n<Here be dragons>\n' +
-                     f"Description: {m['description']}\n" +
+                     f"Description: {strip_tags(m['description'])}\n" +
                      f"<a href=\"{m['coverImage']['large']}\"> Cover Image </a>"
                     ),
                     parse_mode='HTML')
