@@ -43,7 +43,9 @@ def squery_render(terms: str):
     def timefmt(t):
         if not t:
             return '???'
-        return f'{t} seconds'
+        if t < 3600:
+            return 'about an hour or so'
+        return f'{t//(3600/24)} days'
     def nextEpisode(episodes: list):
         eps, time = None, None
         for ex in episodes:
