@@ -427,7 +427,7 @@ class IstorayjeBot:
                         {'user_id': {'$in': doc['users']}}, ins)
                 resp = doc['response_id']
                 self.updater.bot.edit_message_text(
-                        f'Completed:\nadded tags: {" ".join(instags)}\nExtra data:\t{"\n\t".join(extra if extra else ["None"])}',
+                        f'Completed:\nadded tags: {" ".join(instags)}\nExtra data:\t{"    ".join(extra if extra else ["None"])}',
                     chat_id=resp[1],
                     message_id=resp[0],
                 )
