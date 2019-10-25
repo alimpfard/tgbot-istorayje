@@ -237,6 +237,7 @@ class IstorayjeBot:
             if not doc:
                 break
             instags = []
+            extra = []
 
             if doc['service'] == 'google':
                 print('google', doc)
@@ -260,6 +261,7 @@ class IstorayjeBot:
                     )
                     continue
                 instags = [x[0] for x in res if x[1] >= 100*doc['similarity_cap']]
+                extra = details['links']
 
             elif doc['service'] == 'anime':
 
@@ -425,7 +427,7 @@ class IstorayjeBot:
                         {'user_id': {'$in': doc['users']}}, ins)
                 resp = doc['response_id']
                 self.updater.bot.edit_message_text(
-                    f'Completed:\nadded tags: {" ".join(instags)}',
+                        f'Completed:\nadded tags: {" ".join(instags)}\nExtra data:\t{"\n\t".join(extra if extra else ["None"])}',
                     chat_id=resp[1],
                     message_id=resp[0],
                 )
