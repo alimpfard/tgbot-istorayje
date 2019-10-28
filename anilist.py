@@ -71,6 +71,7 @@ def qquery_render(s):
                 input_message_content=InputTextMessageContent(
                     (f"<b>{m['title']['english'] or m['title']['romaji']} ({m['startDate']['year']})</b>\n" +
                      f"Original name: {m['title']['native']}\n" +
+                     f"Romaji name: {m['title']['romaji']}\n" +
                      f"Status: {m['status']}\n" +
                      f"Genres: {', '.join(m.get('genres', None) or ['Nothing'])}\n" +
                      f"Tags: {', '.join(i['name'] for i in (m.get('tags', []))) or 'Nothing'}\n" +
@@ -125,6 +126,7 @@ def iquery_render(id):
                 input_message_content=InputTextMessageContent(
                     (f"<b>{m['title']['english'] or m['title']['romaji']} ({m['startDate']['year']})</b>\n" +
                      f"Original name: {m['title']['native']}\n" +
+                     f"Romaji name: {m['title']['romaji']}\n" +
                      f"Status: {m['status']}\n" +
                      f"Genres: {', '.join(m.get('genres', None) or ['Nothing'])}\n" +
                      f"Tags: {', '.join(i['name'] for i in (m.get('tags', []))) or 'Nothing'}\n" +
@@ -179,6 +181,7 @@ def squery_render(terms: str):
                 input_message_content=InputTextMessageContent(
                     (f"<b>{m['title']['english'] or m['title']['romaji']} ({m['startDate']['year']})</b>\n" +
                      f"Original name: {m['title']['native']}\n" +
+                     f"Romaji name: {m['title']['romaji']}\n" +
                      f"Status: {m['status']}\n" +
                      f"Genres: {', '.join(m.get('genres', None) or ['Nothing'])}\n" +
                      f"Tags: {', '.join(i['name'] for i in (m.get('tags', []))) or 'Nothing'}\n" +
