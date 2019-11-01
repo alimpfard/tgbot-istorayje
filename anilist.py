@@ -54,7 +54,9 @@ def charquery_render(s):
         }
     }
     ''' % json.dumps(s)
-    characters = simple_query(litquery=mquery)['data']['Page']['characters']
+    res = simple_query(litquery=mquery)
+    print('got result', res)
+    characters = res['data']['Page']['characters']
     responses = [
         InlineQueryResultArticle(
             id=uuid4(),
