@@ -1,4 +1,4 @@
-import json, requests
+import json, requests, textwrap
 from telegram import (
     InlineQueryResultArticle, ParseMode, InputTextMessageContent
 )
@@ -89,6 +89,7 @@ def cquery_render(s):
     query {
         Page(page:1, perPage:5) {
             characters(search: %s) {
+                name { full }
                 media(perPage: 2) {
                     nodes {
                         id
@@ -128,7 +129,7 @@ def cquery_render(s):
     media = simple_query(litquery=mquery)
     print('Got result', media)
     characters = media['data']['Page']['characters']
-    media = [y for x in characters for y in x['media']['nodes']]
+    media = [(textwrap.shortten(x['name']['full'], width=10, placeholder='...'), y) for x in characters for y in x['media']['nodes']]
     responses = [
         InlineQueryResultArticle(
             id=uuid4(),
@@ -155,11 +156,11 @@ def cquery_render(s):
 
         return f"episode {eps or '???'} in {timefmt(time)}"
 
-    for m in media:
+    for n,m in media:
         responses.append(
             InlineQueryResultArticle(
                 id=uuid4(),
-                title=(lambda t: f"{'[🌶] ' if m['isAdult'] else ''}[{m['format']}] {t['english'] or t['romaji']}")(m['title']),
+                title=(lambda t: f"[{n}] {'[🌶] ' if m['isAdult'] else ''}[{m['format']}] {t['english'] or t['romaji']}")(m['title']),
                 thumb_url=m['coverImage']['medium'],
                 input_message_content=InputTextMessageContent(
                     (f"<b>{m['title']['english'] or m['title']['romaji']} ({m['startDate']['year']})</b>\n" +
