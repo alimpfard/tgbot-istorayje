@@ -48,7 +48,7 @@ def charquery_render(s):
                     medium
                     large
                 }
-                description(asHtml:false)
+                description(asHtml:true)
                 siteUrl
             }
         }
@@ -71,10 +71,10 @@ def charquery_render(s):
                 title=c['name']['full'],
                 thumb_url=c['image']['medium'],
                 input_message_content=InputTextMessageContent(
-                    (f"<b>{c['name']['last'], c['name']['first']} ({c['name']['full']})</b>\n" +
+                    (f"<b>{c['name']['last']}, {c['name']['first']} ({c['name']['full']})</b>\n" +
                      f"Native name: {c['name']['native']}\n" +
                      f"Other names: {', '.join(c['name']['alternative'] or ['No other name'])}\n" +
-                     f"Description: {c['description']}\n" +
+                     f"{c['description']}\n" +
                      f"<a href=\"{c['image']['large']}\"> Image </a>"
                     ),
                     parse_mode='HTML')
