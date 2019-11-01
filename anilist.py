@@ -37,7 +37,7 @@ def cquery_render(s):
     query {
         Page(page:1, perPage:5) {
             characters(search: %s) {
-                media(perPage:2) {
+                media(perPage: 2) {
                     id
                     title {
                         romaji
@@ -70,6 +70,7 @@ def cquery_render(s):
         }
     }
     ''' % json.dumps(s)
+    print('query is', mquery)
     media = simple_query(_query=mquery)
     print('Got result', media)
     characters = media['data']['Page']['characters']
