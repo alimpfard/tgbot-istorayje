@@ -73,7 +73,7 @@ def cquery_render(s):
     }
     ''' % json.dumps(s)
     print('query is', mquery)
-    media = simple_query(fquery=mquery)
+    media = simple_query(litquery=mquery)
     print('Got result', media)
     characters = media['data']['Page']['characters']
     media = [x['media'] for x in characters]
