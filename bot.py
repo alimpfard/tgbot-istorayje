@@ -1316,6 +1316,8 @@ class IstorayjeBot:
                 elif ireqs == 'bychar':
                     # find result by character
                     update.inline_query.answer(cquery_render(query))
+                elif ireqs == 'char':
+                    update.inline_query.answer(charquery_render(query))
                 elif ireqs == '':
                     # simple query
                     update.inline_query.answer(squery_render(data['query']))

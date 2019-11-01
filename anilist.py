@@ -31,8 +31,57 @@ url = 'https://graphql.anilist.co'
 def aniquery(qry: str, vars: dict):
     return requests.post(url, json={'query': qry, 'variables': vars}).json()
 
+def charquery_render(s):
+    terms=s
+    mquery = '''
+    query {
+        Page(page:1, perPage:10) {
+            characters(search: %s) {
+                name {
+                    first
+                    last
+                    native
+                    alternative
+                    full
+                }
+                image {
+                    medium
+                    large
+                }
+                description(false)
+                siteUrl
+            }
+        }
+    }
+    ''' % json.dumps(s)
+    characters = simple_query(litquery=mquery)['data']['Page']['characters']
+    responses = [
+        InlineQueryResultArticle(
+            id=uuid4(),
+            title=f"{'R' if len(characters) else 'There were no r'}esults for query '{terms}'",
+            input_message_content=InputTextMessageContent('Y u clickin\' this?')
+        )
+    ]
+    for c in characters:
+        responses.append(
+            InlineQueryResultArticle(
+                id=uuid4(),
+                title=c['name']['full'],
+                thumb_url=c['image']['medium'],
+                input_message_content=InputTextMessageContent(
+                    (f"<b>{c['name']['last'], c['name']['first']} ({c['name']['full']})</b>\n" +
+                     f"Native name: {c['name']['native']}\n" +
+                     f"Other names: {', '.join(c['name']['alternative'] or ['No other name'])}\n" +
+                     f"Description: {c['description']}\n" +
+                     f"<a href=\"{c['image']['large']}\"> Image </a>"
+                    ),
+                    parse_mode='HTML')
+            )
+        )
+    return responses
+
 def cquery_render(s):
-    terms=id
+    terms=s
     mquery = '''
     query {
         Page(page:1, perPage:5) {
