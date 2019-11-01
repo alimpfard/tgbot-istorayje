@@ -72,9 +72,8 @@ def charquery_render(s):
                 thumb_url=c['image']['medium'],
                 input_message_content=InputTextMessageContent(
                     (f"<b>{c['name']['last']}, {c['name']['first']} ({c['name']['full']})</b>\n" +
-                     f"Native name: {c['name']['native']}\n\n" +
+                     f"Native name: {c['name']['native']}\n" +
                      f"Other names: {', '.join(c['name']['alternative'] or ['No other name'])}\n" +
-                     "\n" +
                      "\n" +
                      f"{strip_tags(c['description'])}\n" +
                      f"<a href=\"{c['image']['large']}\"> Image</a>, <a href=\"{c['siteUrl']}\"> Anilist Page </a>"
