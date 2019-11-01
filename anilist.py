@@ -74,7 +74,7 @@ def charquery_render(s):
                     (f"<b>{c['name']['last']}, {c['name']['first']} ({c['name']['full']})</b>\n" +
                      f"Native name: {c['name']['native']}\n" +
                      f"Other names: {', '.join(c['name']['alternative'] or ['No other name'])}\n" +
-                     f"{c['description']}\n" +
+                     f"{strip_tags(c['description'])}\n" +
                      f"<a href=\"{c['image']['large']}\"> Image </a>"
                     ),
                     parse_mode='HTML')
