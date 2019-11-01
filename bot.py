@@ -158,6 +158,7 @@ class IstorayjeBot:
         return [
             CommandHandler('start', self.handle_start),
             CommandHandler('list_index', self.handle_list_index),
+            CommandHandler('alias', self.handle_alias),
             CommandHandler('connect', self.start_option_set),
             CommandHandler('temp', self.set_temp),
             CommandHandler('set', self.set_option),
@@ -1098,6 +1099,14 @@ class IstorayjeBot:
 
         return coll, qstack, extra
 
+    def resolve_alias(self, alias, user_id, alias_map={}):
+        aliases = self.db.db.aliases.find_one({'user_id': user_id})
+        if not aliases:
+            return alias
+        return aliases.get('aliases', alias_map).get(alias, alias)
+
+    def add_alias(self, alias, value, user_id):
+        self.db.db.aliases.find_one_and_update({'user_id': user_id}, {'aliases': {'$set': {alias, value}}}, upsert=True)
 
     def clone_messaage_with_data(self, data, tags):
         ty = data['type']
@@ -1326,6 +1335,7 @@ class IstorayjeBot:
     def handle_query(self, bot, update, user_data=None, chat_data=None):
         try:
             coll, query, extra = self.parse_query(update.inline_query.query)
+            coll = self.resolve_alias(coll, update.inline_query.from_user.id)
             if coll.startswith('@'):
                 # external sources
                 return self.external_source_handler({'source': coll[1:], 'query': ' '.join(update.inline_query.query.strip().split(' ')[1:])}, bot, update, user_data, chat_data)
@@ -1529,6 +1539,23 @@ class IstorayjeBot:
         update.message.reply_text(
             'set temp storage to ' + username
         )
+
+    def handle_alias(self, bot, update):
+        ssubcommand = update.message.text[len('/alias '):]
+        cmd, *args = ssubcommand.split(' ')
+        if cmd == 'set':
+            if len(args) != 2:
+                update.message.reply_text(f'invalid number of arguments, expected 2, got {len(args)}')
+                return
+            self.add_alias(args[0], args[1], update.message.from_user.id)
+            update.message.reply_text(f'Added collection alias "{args[0]}" for "{args[1]}"')
+            return
+        elif cmd == 'get':
+            update.message.reply_text(f'collection "{args[0]}" resolves to "{self.resolve_alias(args[0], update.message.from_user.id)}"')
+            return
+        else:
+            update.message.reply_text(f'Unknown command')
+            return
 
     def set_option(self, bot, update):
         context = self.context.get(update.message.from_user.id, None)
