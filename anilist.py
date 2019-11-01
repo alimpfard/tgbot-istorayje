@@ -129,7 +129,7 @@ def cquery_render(s):
     media = simple_query(litquery=mquery)
     print('Got result', media)
     characters = media['data']['Page']['characters']
-    media = [(textwrap.shortten(x['name']['full'], width=10, placeholder='...'), y) for x in characters for y in x['media']['nodes']]
+    media = [(textwrap.shorten(x['name']['full'], width=10, placeholder='...'), y) for x in characters for y in x['media']['nodes']]
     responses = [
         InlineQueryResultArticle(
             id=uuid4(),
