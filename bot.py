@@ -1106,7 +1106,7 @@ class IstorayjeBot:
         return aliases.get('aliases', alias_map).get(alias, alias)
 
     def add_alias(self, alias, value, user_id):
-        self.db.db.aliases.find_one_and_update({'user_id': user_id}, {'aliases': {'$set': {alias, value}}}, upsert=True)
+        self.db.db.aliases.find_one_and_update({'user_id': user_id}, {'$set': {f'aliases.{alias}': value}}, upsert=True)
 
     def clone_messaage_with_data(self, data, tags):
         ty = data['type']
