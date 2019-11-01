@@ -1619,6 +1619,9 @@ class IstorayjeBot:
         update.message.reply_text(
             'To search any given collection, use the bot\'s inline interface as such:\n' +
             '    @istorayjebot _collection_ _query_ _{caption}_\n' +
+            'You may want to alias a collection (external collections supported) to a different name, to do that, send\n' +
+            '    /alias set <alias> <value>\n' +
+            '  for example: /alias set ac @anilist:char\n' +
             'The caption can be omitted, or set as any of the following to get the "default" caption:\n' +
             '    `$def` or `$default` or `$`' +
             'for example:\n' +
@@ -1629,7 +1632,14 @@ class IstorayjeBot:
             'To match "lol" in collection "gif" and send no caption\n' +
             'or yet another example:\n' +
             '    @istorayjebot gif fish {Help, I am drowning!}\n' +
-            'to match "fish" in collection "gif" and give it the caption "Help, I am drowning!"',
+            'to match "fish" in collection "gif" and give it the caption "Help, I am drowning!"\n\n' +
+            'External pseudo-collections (collections starting with \'@\')\n' +
+            '    `@anilist`: query anilist for anime stuff\n' +
+            '        takes an optional modifier in the form `@anilist:modifier` where modifier is:\n' +
+            '        `ql`     - custom graphql search\n' +
+            '        `bychar` - search anime by character name\n' +
+            '        `char`   - search for character\n' +
+            '        `aggql`  - aggregate operations on result of gql\n',
             parse_mode=ParseMode.MARKDOWN
         )
         update.message.reply_text(
