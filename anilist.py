@@ -38,31 +38,33 @@ def cquery_render(s):
         Page(page:1, perPage:5) {
             characters(search: %s) {
                 media(perPage: 2) {
-                    id
-                    title {
-                        romaji
-                        native
-                        english
-                    }
-                    type
-                    format
-                    status
-                    description
-                    season
-                    startDate { year }
-                    episodes
-                    duration
-                    coverImage {
-                        medium
-                        large
-                    }
-                    genres
-                    isAdult
-                    tags { name }
-                    airingSchedule {
-                        nodes {
-                            timeUntilAiring
-                            episode
+                    nodes {
+                        id
+                        title {
+                            romaji
+                            native
+                            english
+                        }
+                        type
+                        format
+                        status
+                        description
+                        season
+                        startDate { year }
+                        episodes
+                        duration
+                        coverImage {
+                            medium
+                            large
+                        }
+                        genres
+                        isAdult
+                        tags { name }
+                        airingSchedule {
+                            nodes {
+                                timeUntilAiring
+                                episode
+                            }
                         }
                     }
                 }
@@ -71,7 +73,7 @@ def cquery_render(s):
     }
     ''' % json.dumps(s)
     print('query is', mquery)
-    media = simple_query(_query=mquery)
+    media = simple_query(fquery=mquery)
     print('Got result', media)
     characters = media['data']['Page']['characters']
     media = [x['media'] for x in characters]
@@ -290,7 +292,9 @@ def squery_render(terms: str):
         )
     return responses
 
-def simple_query(terms=None, _query=None):
+def simple_query(terms=None, _query=None, litquery=None):
+    if litquery:
+        return aniquery(litquery, {})
     return aniquery(
         '''
         query($page: Int, $perPage: Int, $search: String) {
