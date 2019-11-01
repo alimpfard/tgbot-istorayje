@@ -48,7 +48,7 @@ def charquery_render(s):
                     medium
                     large
                 }
-                description(false)
+                description(asHtml:false)
                 siteUrl
             }
         }
