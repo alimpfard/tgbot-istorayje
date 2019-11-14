@@ -33,9 +33,10 @@ class APIHandler(object):
         }
         self.comms = (
             'graphql',
-            'json',
+            'json/post',
             'html/xpath',
-            'html/link',
+            'http/link',
+            'http/json',
         )
         self.metavarre = re.compile(r'(?!\\)\$(\w+)')
 
@@ -95,13 +96,17 @@ class APIHandler(object):
         inpv = self.input_adapters[inp]
 
         q = self.adapter(inp, inpv, query)
-        if comm_type == 'html/link':
+        if comm_type == 'http/link':
             path = self.metavarre.sub(urllib.parse.quote_plus(q), path)
             return path
         
-        if comm_type == 'json':
+        if comm_type == 'json/post':
             return DotDict({'x':requests.post(path, data=q).json()}).x
         
+        if comm_type == 'http/json':
+            path = self.metavarre.sub(urllib.parse.quote_plus(q), path)
+            return DotDict({'x': requests.get(path).json()}).x
+            
         raise Exception(f'type {comm_type} not yet implemented')
     
     def render(self, api, value):
