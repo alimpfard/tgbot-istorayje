@@ -103,4 +103,4 @@ class APIHandler(object):
         
         outv = self.output_adapters[out]
         q = self.adapter(out, outv, value)
-        return tgwrap(api, q)
+        return self.tgwrap(api, q)
