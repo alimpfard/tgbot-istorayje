@@ -98,7 +98,7 @@ class APIHandler(object):
             return path
         
         if comm_type == 'json':
-            return DotDict(x=requests.post(path, data=q).json()).x
+            return DotDict(requests.post(path, data=q).json()).x
         
         raise Exception(f'type {comm_type} not yet implemented')
     
