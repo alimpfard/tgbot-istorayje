@@ -80,8 +80,9 @@ class APIHandler(object):
         for metavar in self.metavarre.finditer(body):
             if metavar.group(1) != vname:
                 raise Exception(f'Unknown meta variable `{matavar.group(1)}` (at offset {metavar.pos})')
-        
-        self.ios[iotype][name] = (vname, f'lambda {vname}: {self.metavarre.sub(vname, body)}')
+        body = f'lambda {vname}: {self.metavarre.sub(vname, body)}'
+        compile(body, f'{iotype}:{name}', 'eval', dont_inherit=True)
+        self.ios[iotype][name] = (vname, body)
         self.flush()
 
     def tgwrap(self, query, stuff):
