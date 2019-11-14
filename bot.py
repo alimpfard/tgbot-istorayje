@@ -51,7 +51,7 @@ class IstorayjeBot:
         self.stopwordset = stopwords.words('english')
         self.random = random.Random()
         self.token = token
-        self.updater = Updater(token)
+        self.updater = Updater(token, use_context=False)
         self.db = db
         self.external_api_handler = APIHandler(self)
         for handler in self.create_handlers():

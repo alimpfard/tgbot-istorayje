@@ -77,7 +77,7 @@ class APIHandler(object):
         self.apis[name] = (comm_type, inp, out, path)
         self.flush()
 
-    def adapter(self, adapter, value):
+    def adapter(self, name, adapter, value):
         vname, body = adapter
         return eval(compile(body, name, 'eval', dont_inherit=True), {}, {})(value)
 
@@ -89,9 +89,9 @@ class APIHandler(object):
         if out not in self.output_adapters:
             raise Exception(f'Undefined ouput adapter {out}')
 
-        inp = self.input_adapters[inp]
+        inpv = self.input_adapters[inp]
 
-        q = self.adapter(inp, query)
+        q = self.adapter(inp, inpv, query)
         if comm_type == 'html/link':
             path = self.metavarre.sub(q, path)
             return path
@@ -101,6 +101,6 @@ class APIHandler(object):
     def render(self, api, value):
         comm_type, inp, out, path = self.apis[api]
         
-        out = self.output_adapters[out]
-        q = self.adapter(value)
+        outv = self.output_adapters[out]
+        q = self.adapter(out, outv, value)
         return tgwrap(api, q)
