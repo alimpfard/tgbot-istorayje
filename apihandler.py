@@ -61,10 +61,10 @@ class APIHandler(object):
         return [
             InlineQueryResultArticle(
                 id=uuid4(),
-                title="request results for " + query,
+                title=f"result {k}",
                 input_message_content=InputTextMessageContent(x)
             )
-        for x in stuff]
+        for k,x in stuff]
 
     def declare(self, name, comm_type, inp, out, path):
         if name in self.apis:
