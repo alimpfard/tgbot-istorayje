@@ -54,7 +54,7 @@ class APIHandler(object):
             if metavar.group(1) != vname:
                 raise Exception(f'Unknown meta variable `{matavar.group(1)}` (at offset {metavar.pos})')
         
-        self.ios[iotype][name] = (vname, eval(compile(f'lambda {vname}: {self.metavarre.sub(vname, body)}', name, 'eval', dont_inherit=True), {}, {}))
+        self.ios[iotype][name] = (vname, f'lambda {vname}: {self.metavarre.sub(vname, body)}')
         self.flush()
 
     def tgwrap(self, query, stuff):
@@ -79,7 +79,7 @@ class APIHandler(object):
 
     def adapter(self, adapter, value):
         vname, body = adapter
-        return body(value)
+        return eval(compile(body, name, 'eval', dont_inherit=True), {}, {})(value)
 
     def invoke(self, api, query):
         comm_type, inp, out, path = self.apis[name]
