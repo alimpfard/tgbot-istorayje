@@ -71,7 +71,7 @@ class APIHandler(object):
             raise Exception(f'duplicate API name {name}')
 
         for metavar in self.metavarre.finditer(path):
-            if metavar.group(1) != vname:
+            if metavar.group(1) != 'result':
                 raise Exception(f'Unknown meta variable `{matavar.group(1)}` (at offset {metavar.pos})')
 
         self.apis[name] = (comm_type, inp, out, path)
