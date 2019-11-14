@@ -1565,32 +1565,36 @@ class IstorayjeBot:
     def handle_api(self, bot, update):
         ssubcommand = update.message.text[len('/api '):]
         cmd, *args = ssubcommand.split(' ')
-        if cmd == 'declare':
-            # declare <name> <comm_type> <input> <output> <api_path>
-            if len(args) != 5:
-                update.message.reply_text(f'invalid number of arguments, expected 5 (declare <name> <comm_type> <input> <output> <api_path>), got {len(args)}')
+        try:
+            if cmd == 'declare':
+                # declare <name> <comm_type> <input> <output> <api_path>
+                if len(args) != 5:
+                    update.message.reply_text(f'invalid number of arguments, expected 5 (declare <name> <comm_type> <input> <output> <api_path>), got {len(args)}')
+                    return
+                name, comm_type, inp, out, path = args
+                if comm_type not in self.external_api_handler.comms:
+                    update.message.reply_text(f'invalid comm_type {comm_type}, valid types are: {self.external_api_handler.comms}')
+                    return
+
+                self.external_api_handler.declare(name, comm_type, inp, out, path)
+                update.message.reply_text(f'registered api {name} as {path}, with input {inp} and output {out} for you.\nnow define the IOs')
+            elif cmd == 'define':
+                # define [input/output] <name> <vname> ...request_body
+                if len(args) < 3:
+                    update.message.reply_text(f'invalid number of arguments, expected at least 3 arguments (define [input/output] <name> <vname> ...request_body), but got {len(args)}') 
+                    return
+                iotype, name, vname, *req = args
+                if iotype not in ['input', 'output']:
+                    update.message.reply_text(f'invalid io type {iotype}, expected either `input` or `output`')
+                    return
+                self.external_api_handler.define(iotype, name, vname, ' '.join(req))
+                update.message.reply_text(f'registered {iotype} adapter {name} as `{" ".join(req)}`({vname})')
+            else:
+                update.message.reply_text('unknown command')
                 return
-            name, comm_type, inp, out, path = args
-            if comm_type not in self.external_api_handler.comms:
-                update.message.reply_text(f'invalid comm_type {comm_type}, valid types are: {self.external_api_handler.comms}')
-                return
+        except Exception as e:
+            update.message.reply_text(str(e))
             
-            self.external_api_handler.declare(name, comm_type, inp, out, path)
-            update.message.reply_text(f'registered api {name} as {path}, with input {inp} and output {out} for you.\nnow define the IOs')
-        elif cmd == 'define':
-            # define [input/output] <name> <vname> ...request_body
-            if len(args) < 3:
-                update.message.reply_text(f'invalid number of arguments, expected at least 3 arguments (define [input/output] <name> <vname> ...request_body), but got {len(args)}') 
-                return
-            iotype, name, vname, *req = args
-            if iotype not in ['input', 'output']:
-                update.message.reply_text(f'invalid io type {iotype}, expected either `input` or `output`')
-                return
-            self.external_api_handler.define(iotype, name, vname, ' '.join(req))
-            update.message.reply_text(f'registered {iotype} adapter {name} as `{" ".join(req)}`({vname})')
-        else:
-            update.message.reply_text('unknown command')
-            return
 
     def handle_alias(self, bot, update):
         ssubcommand = update.message.text[len('/alias '):]
