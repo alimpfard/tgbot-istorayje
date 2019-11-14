@@ -1340,7 +1340,7 @@ class IstorayjeBot:
                     res = self.invoke(coll, ireqs, query)
                     update.inline_query.answer(self.render_api(coll, ireqs, res))
                 except Exception as e:
-                    raise Exception(f'Invalid API invokation: {e}')
+                    raise Exception(f'Invalid API invocation: {e}')
             else:
                 raise Exception(f'Undefined source {coll}')
         except Exception as e:

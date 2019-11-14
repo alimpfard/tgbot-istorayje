@@ -82,7 +82,7 @@ class APIHandler(object):
         return eval(compile(body, name, 'eval', dont_inherit=True), {}, {})(value)
 
     def invoke(self, api, query):
-        comm_type, inp, out, path = self.apis[name]
+        comm_type, inp, out, path = self.apis[api]
         if inp not in self.input_adapters:
             raise Exception(f'Undefined input adapter {inp}')
         
@@ -99,7 +99,7 @@ class APIHandler(object):
             raise Exception(f'type {comm_type} not yet implemented')
     
     def render(self, api, value):
-        comm_type, inp, out, path = self.apis[name]
+        comm_type, inp, out, path = self.apis[api]
         
         out = self.output_adapters[out]
         q = self.adapter(value)
