@@ -96,8 +96,11 @@ class APIHandler(object):
         if comm_type == 'html/link':
             path = self.metavarre.sub(urllib.parse.quote_plus(q), path)
             return path
-        else:
-            raise Exception(f'type {comm_type} not yet implemented')
+        
+        if comm_type == 'json':
+            return DotDict(x=json.loads(requests.post(path, data=q).json())).x
+        
+        raise Exception(f'type {comm_type} not yet implemented')
     
     def render(self, api, value):
         comm_type, inp, out, path = self.apis[api]
