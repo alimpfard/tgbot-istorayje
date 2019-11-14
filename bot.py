@@ -1277,10 +1277,10 @@ class IstorayjeBot:
         return qq
 
     def invoke(self, api, reqs, query):
-        pass
+        return self.external_api_handler.invoke(api, query)
 
     def render_api(self, api, reqs, res):
-        pass
+        return self.external_api_handler.render(api, res)
     
     def has_api(self, user, api):
         return api in self.external_api_handler.apis

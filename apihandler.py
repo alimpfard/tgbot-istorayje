@@ -1,0 +1,88 @@
+import re
+import requests
+import json 
+
+class DotDict(dict):
+    __getattr__ = dict.__getitem__
+    __setattr__ = dict.__setitem__
+    __delattr__ = dict.__delitem__
+
+    def __init__(self, dct):
+        for key, value in dct.items():
+            if hasattr(value, 'keys'):
+                value = DotDict(value)
+            self[key] = value
+
+class APIHandler(object):
+    def __init__(self, bot):
+        self.bot = bot
+        self.input_adapters = None
+        self.output_adapters = None
+        self.apis = None
+        self.load()
+        self.ios = {
+            'input': self.input_adapters,
+            'output': self.output_adapters,
+        }
+        self.comms = (
+            'graphql',
+            'json',
+            'html/xpath',
+            'html/link',
+        )
+        self.metavarre = re.compile(r'(?!\\)\$(\w+)')
+
+    def flush(self):
+        self.bot.db.db.external_apis.replace_one({'kind': 'api'}, {'kind': 'api', 'data': self.apis})
+        self.bot.db.db.external_apis.replace_one({'kind': 'input'}, {'kind': 'input', 'data': self.input_adapters})
+        self.bot.db.db.external_apis.replace_one({'kind': 'output'}, {'kind': 'output', 'data': self.output_adapters})
+
+    def load(self):
+        self.apis = self.bot.db.db.external_apis.find_one({'kind': 'api'}) or {'kind': 'api', 'data': {}}
+        self.input_adapters = self.bot.db.db.external_apis.find_one({'kind': 'input'}) or {'kind': 'input', 'data': {}}
+        self.output_adapters = self.bot.db.db.external_apis.find_one({'kind': 'output'}) or {'kind': 'output', 'data': {}}
+
+    def define(self, iotype, name, vname, body):
+        if name in self.ios[iotype]:
+            raise Exception(f'duplicate {iotype} IO {name}')
+
+        for metavar in self.metavarre.finditer(body):
+            if metavar.group(1) != vname:
+                raise Exception(f'Unknown meta variable `{matavar.group(1)}` (at offset {metavar.pos})')
+        
+        self.ios[iotype][name] = (vname, eval(compile(f'lambda {vname}: {self.metavarre.sub(vname, body)}', name, 'eval', dont_inherit=True), {}, {}))
+        self.flush()
+
+
+    def declare(self, name, comm_type, inp, out, path):
+        if name in self.apis:
+            raise Exception(f'duplicate API name {name}')
+
+        for metavar in self.metavarre.finditer(path):
+            if metavar.group(1) != vname:
+                raise Exception(f'Unknown meta variable `{matavar.group(1)}` (at offset {metavar.pos})')
+
+        self.apis[name] = (comm_type, inp, out, path)
+        self.flush()
+
+    def adapter(self, adapter, value):
+        vname, body = adapter
+        return body(value)
+
+    def invoke(self, api, query):
+        comm_type, inp, out, path = self.apis[name]
+        if inp not in self.input_adapters:
+            raise Exception(f'Undefined input adapter {inp}')
+        
+        if out not in self.output_adapters:
+            raise Exception(f'Undefined ouput adapter {out}')
+
+        inp = self.input_adapters[inp]
+
+        q = self.adapter(inp, query)
+        if comm_type == 'html/link':
+            path = self.metavarre.sub(q, path)
+            return path
+
+        else:
+            raise Exception(f'type {comm_type} not yet implemented')
