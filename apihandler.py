@@ -38,9 +38,9 @@ class APIHandler(object):
         self.metavarre = re.compile(r'(?!\\)\$(\w+)')
 
     def flush(self):
-        self.bot.db.db.external_apis.replace_one({'kind': 'api'}, {'kind': 'api', 'data': self.apis}, upsert=True)
-        self.bot.db.db.external_apis.replace_one({'kind': 'input'}, {'kind': 'input', 'data': self.input_adapters}, upsert=True)
-        self.bot.db.db.external_apis.replace_one({'kind': 'output'}, {'kind': 'output', 'data': self.output_adapters}, upsert=True)
+        self.bot.db.db.external_apis.update_one({'kind': 'api'}, {'$set': {'data': self.apis}}, upsert=True)
+        self.bot.db.db.external_apis.update_one({'kind': 'input'}, {'$set': {'data': self.input_adapters}}, upsert=True)
+        self.bot.db.db.external_apis.update_one({'kind': 'output'}, {'$set': {'data': self.output_adapters}}, upsert=True)
 
     def load(self):
         self.apis = self.bot.db.db.external_apis.find_one({'kind': 'api'}) or {'kind': 'api', 'data': {}}
