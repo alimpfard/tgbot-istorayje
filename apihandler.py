@@ -16,6 +16,8 @@ class DotDict(dict):
         for key, value in dct.items():
             if hasattr(value, 'keys'):
                 value = DotDict(value)
+            elif isinstance(value, list):
+                value = [DotDict({'a':x}).a for x in value]
             self[key] = value
 
 class APIHandler(object):
@@ -98,7 +100,7 @@ class APIHandler(object):
             return path
         
         if comm_type == 'json':
-            return DotDict(requests.post(path, data=q).json())
+            return DotDict({'x':requests.post(path, data=q).json()}).x
         
         raise Exception(f'type {comm_type} not yet implemented')
     
