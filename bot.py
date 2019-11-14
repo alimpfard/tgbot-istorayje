@@ -1566,6 +1566,19 @@ class IstorayjeBot:
         ssubcommand = update.message.text[len('/api '):]
         cmd, *args = ssubcommand.split(' ')
         try:
+            if cmd == 'redeclare':
+                # redeclare <name> <comm_type> <input> <output> <api_path>
+                if len(args) != 5:
+                    update.message.reply_text(f'invalid number of arguments, expected 5 (declare <name> <comm_type> <input> <output> <api_path>), got {len(args)}')
+                    return
+                name, comm_type, inp, out, path = args
+                if comm_type not in self.external_api_handler.comms:
+                    update.message.reply_text(f'invalid comm_type {comm_type}, valid types are: {self.external_api_handler.comms}')
+                    return
+
+                del self.external_api_handler.apis[name]
+                self.external_api_handler.declare(name, comm_type, inp, out, path)
+                update.message.reply_text(f'registered api {name} as {path}, with input {inp} and output {out} for you.\nnow define the IOs')
             if cmd == 'declare':
                 # declare <name> <comm_type> <input> <output> <api_path>
                 if len(args) != 5:
@@ -1578,6 +1591,18 @@ class IstorayjeBot:
 
                 self.external_api_handler.declare(name, comm_type, inp, out, path)
                 update.message.reply_text(f'registered api {name} as {path}, with input {inp} and output {out} for you.\nnow define the IOs')
+            elif cmd == 'redefine':
+                # redefine [input/output] <name> <vname> ...request_body
+                if len(args) < 3:
+                    update.message.reply_text(f'invalid number of arguments, expected at least 3 arguments (define [input/output] <name> <vname> ...request_body), but got {len(args)}') 
+                    return
+                iotype, name, vname, *req = args
+                if iotype not in ['input', 'output']:
+                    update.message.reply_text(f'invalid io type {iotype}, expected either `input` or `output`')
+                    return
+                del self.external_api_handler.ios[iotype][name]
+                self.external_api_handler.define(iotype, name, vname, ' '.join(req))
+                update.message.reply_text(f'registered {iotype} adapter {name} as `{" ".join(req)}`({vname})')
             elif cmd == 'define':
                 # define [input/output] <name> <vname> ...request_body
                 if len(args) < 3:
@@ -1594,7 +1619,7 @@ class IstorayjeBot:
                 return
         except Exception as e:
             update.message.reply_text(str(e))
-            
+
 
     def handle_alias(self, bot, update):
         ssubcommand = update.message.text[len('/alias '):]
