@@ -94,7 +94,7 @@ class APIHandler(object):
         q = self.adapter(inp, inpv, query)
         if comm_type == 'html/link':
             path = self.metavarre.sub(q, path)
-            return [path]
+            return path
         else:
             raise Exception(f'type {comm_type} not yet implemented')
     
