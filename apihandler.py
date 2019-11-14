@@ -7,6 +7,29 @@ from telegram import (
 from uuid import uuid4
 import urllib
 
+from html.parser import HTMLParser
+
+
+class MLStripper(HTMLParser):
+    def __init__(self):
+        self.reset()
+        self.strict = False
+        self.convert_charrefs= True
+        self.fed = []
+    def handle_data(self, d):
+        self.fed.append(d)
+    def get_data(self):
+        return ''.join(self.fed)
+
+def strip_tags(html):
+    if not html:
+        return '[nothing here]'
+    s = MLStripper()
+    s.feed(html)
+    x = s.get_data()
+    print('stripped:', x)
+    return x.strip()
+
 class DotDict(dict):
     __getattr__ = dict.__getitem__
     __setattr__ = dict.__setitem__
@@ -83,7 +106,7 @@ class APIHandler(object):
 
     def adapter(self, name, adapter, value):
         vname, body = adapter
-        return eval(compile(body, name, 'eval', dont_inherit=True), {}, {})(value)
+        return eval(compile(body, name, 'eval', dont_inherit=True), {'strip_tags': strip_tags}, {})(value)
 
     def invoke(self, api, query):
         comm_type, inp, out, path = self.apis[api]
@@ -106,7 +129,7 @@ class APIHandler(object):
         if comm_type == 'http/json':
             path = self.metavarre.sub(urllib.parse.quote_plus(q), path)
             return DotDict({'x': requests.get(path).json()}).x
-            
+
         raise Exception(f'type {comm_type} not yet implemented')
     
     def render(self, api, value):
