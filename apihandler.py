@@ -43,9 +43,9 @@ class APIHandler(object):
         self.bot.db.db.external_apis.update_one({'kind': 'output'}, {'$set': {'data': self.output_adapters}}, upsert=True)
 
     def load(self):
-        self.apis = self.bot.db.db.external_apis.find_one({'kind': 'api'}) or {'kind': 'api', 'data': {}}
-        self.input_adapters = self.bot.db.db.external_apis.find_one({'kind': 'input'}) or {'kind': 'input', 'data': {}}
-        self.output_adapters = self.bot.db.db.external_apis.find_one({'kind': 'output'}) or {'kind': 'output', 'data': {}}
+        self.apis = (self.bot.db.db.external_apis.find_one({'kind': 'api'}) or {'data': {}})['data']
+        self.input_adapters = (self.bot.db.db.external_apis.find_one({'kind': 'input'}) or {'data': {}})['data']
+        self.output_adapters = (self.bot.db.db.external_apis.find_one({'kind': 'output'}) or {'data': {}})['data']
 
     def define(self, iotype, name, vname, body):
         if name in self.ios[iotype]:
