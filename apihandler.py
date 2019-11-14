@@ -1,6 +1,10 @@
 import re
 import requests
 import json 
+from telegram import (
+    InlineQueryResultArticle, ParseMode, InputTextMessageContent
+)
+from uuid import uuid4
 
 class DotDict(dict):
     __getattr__ = dict.__getitem__
@@ -53,6 +57,14 @@ class APIHandler(object):
         self.ios[iotype][name] = (vname, eval(compile(f'lambda {vname}: {self.metavarre.sub(vname, body)}', name, 'eval', dont_inherit=True), {}, {}))
         self.flush()
 
+    def tgwrap(self, query, stuff):
+        return [
+            InlineQueryResultArticle(
+                id=uuid4(),
+                title="request results for " + query,
+                input_message_content=InputTextMessageContent(x)
+            )
+        for x in stuff]
 
     def declare(self, name, comm_type, inp, out, path):
         if name in self.apis:
@@ -83,6 +95,12 @@ class APIHandler(object):
         if comm_type == 'html/link':
             path = self.metavarre.sub(q, path)
             return path
-
         else:
             raise Exception(f'type {comm_type} not yet implemented')
+    
+    def render(self, api, value):
+        comm_type, inp, out, path = self.apis[name]
+        
+        out = self.output_adapters[out]
+        q = self.adapter(value)
+        return tgwrap(api, q)
