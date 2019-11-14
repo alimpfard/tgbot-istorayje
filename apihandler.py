@@ -5,6 +5,7 @@ from telegram import (
     InlineQueryResultArticle, ParseMode, InputTextMessageContent
 )
 from uuid import uuid4
+import urllib
 
 class DotDict(dict):
     __getattr__ = dict.__getitem__
@@ -93,7 +94,7 @@ class APIHandler(object):
 
         q = self.adapter(inp, inpv, query)
         if comm_type == 'html/link':
-            path = self.metavarre.sub(q, path)
+            path = self.metavarre.sub(urllib.parse.quote_plus(q), path)
             return path
         else:
             raise Exception(f'type {comm_type} not yet implemented')
