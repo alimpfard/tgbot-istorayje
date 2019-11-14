@@ -34,7 +34,7 @@ from nltk.corpus import stopwords
 from nltk.corpus import wordnet as wn
 from nltk.stem import PorterStemmer
 from bson.json_util import dumps
-
+from apihandler import APIHandler
 
 def get_any(obj, lst):
     for prop in lst:
@@ -53,6 +53,7 @@ class IstorayjeBot:
         self.token = token
         self.updater = Updater(token)
         self.db = db
+        self.external_api_handler = APIHandler(self)
         for handler in self.create_handlers():
             self.register_handler(handler)
         self.updater.dispatcher.add_error_handler(self.error)
@@ -159,6 +160,7 @@ class IstorayjeBot:
             CommandHandler('start', self.handle_start),
             CommandHandler('list_index', self.handle_list_index),
             CommandHandler('alias', self.handle_alias),
+            CommandHandler('api', self.handle_api),
             CommandHandler('connect', self.start_option_set),
             CommandHandler('temp', self.set_temp),
             CommandHandler('set', self.set_option),
@@ -1274,6 +1276,16 @@ class IstorayjeBot:
                     qs.add(tp)
         return qq
 
+    def invoke(self, api, reqs, query):
+        pass
+
+    def render_api(self, api, reqs, res):
+        pass
+    
+    def has_api(self, user, api):
+        return api in self.external_api_handler.apis
+
+
     def external_source_handler(self, data: dict, bot, update, user_data=None, chat_data=None):
         try:
             coll, *ireqs = data['source'].split(':')
@@ -1323,6 +1335,12 @@ class IstorayjeBot:
                     update.inline_query.answer(squery_render(data['query']))
                 else:
                     raise Exception(f'Arguments to source {coll} not understood ({ireqs})')
+            elif self.has_api(update.inline_query.from_user.id, coll):
+                try:
+                    res = self.invoke(coll, ireqs, query)
+                    update.inline_query.answer(self.render_api(coll, ireqs, res))
+                except Exception as e:
+                    raise Exception(f'Invalid API invokation: {e}')
             else:
                 raise Exception(f'Undefined source {coll}')
         except Exception as e:
@@ -1544,6 +1562,35 @@ class IstorayjeBot:
         update.message.reply_text(
             'set temp storage to ' + username
         )
+    def handle_api(self, bot, update):
+        ssubcommand = update.message.text[len('/api '):]
+        cmd, *args = ssubcommand.split(' ')
+        if cmd == 'declare':
+            # declare <name> <comm_type> <input> <output> <api_path>
+            if len(args) != 5:
+                update.message.reply_text(f'invalid number of arguments, expected 5 (declare <name> <comm_type> <input> <output> <api_path>), got {len(args)}')
+                return
+            name, comm_type, inp, out, path = args
+            if comm_type not in self.external_api_handler.comms:
+                update.message.reply_text(f'invalid comm_type {comm_type}, valid types are: {self.external_api_handler.comms}')
+                return
+            
+            self.external_api_handler.declare(name, comm_type, inp, out, path)
+            update.message.reply_text(f'registered api {name} as {path}, with input {inp} and output {out} for you.\nnow define the IOs')
+        elif cmd == 'define':
+            # define [input/output] <name> <vname> ...request_body
+            if len(args) < 3:
+                update.message.reply_text(f'invalid number of arguments, expected at least 3 arguments (define [input/output] <name> <vname> ...request_body), but got {len(args)}') 
+                return
+            iotype, name, vname, *req = args
+            if iotype not in ['input', 'output']:
+                update.message.reply_text(f'invalid io type {iotype}, expected either `input` or `output`')
+                return
+            self.external_api_handler.define(iotype, name, vname, ' '.join(req))
+            update.message.reply_text(f'registered {iotype} adapter {name} as `{" ".join(req)}`({vname})')
+        else:
+            update.message.reply_text('unknown command')
+            return
 
     def handle_alias(self, bot, update):
         ssubcommand = update.message.text[len('/alias '):]
