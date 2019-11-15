@@ -114,7 +114,7 @@ class APIHandler(object):
         xbody = self.gmetavarre(vname).sub(vname, body)
         
         for r in replacements:
-            xbody = self.gmetavarre(r).sub(f'({self.ios[iotype][r]})', xbody)
+            xbody = self.gmetavarre(r).sub(f'({self.ios[iotype][r][1]})', xbody)
 
         if not xbody:
             xbody = vname
