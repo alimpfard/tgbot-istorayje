@@ -8,6 +8,7 @@ from uuid import uuid4
 import urllib
 
 from html.parser import HTMLParser
+from lxml import html as xhtml
 
 
 class MLStripper(HTMLParser):
@@ -80,8 +81,12 @@ class APIHandler(object):
         for metavar in self.metavarre.finditer(body):
             if metavar.group(1) != vname:
                 raise Exception(f'Unknown meta variable `{matavar.group(1)}` (at offset {metavar.pos})')
-        body = f'lambda {vname}: {self.metavarre.sub(vname, body)}'
+        xbody = self.metavarre.sub(vname, body)
+        if not xbody:
+            xbody = vname
+        body = f'lambda {vname}: {xbody}'
         compile(body, f'{iotype}:{name}', 'eval', dont_inherit=True)
+
         self.ios[iotype][name] = (vname, body)
         self.flush()
 
@@ -97,7 +102,7 @@ class APIHandler(object):
     def declare(self, name, comm_type, inp, out, path):
         if name in self.apis:
             raise Exception(f'duplicate API name {name}')
-
+        
         for metavar in self.metavarre.finditer(path):
             if metavar.group(1) != 'result':
                 raise Exception(f'Unknown meta variable `{matavar.group(1)}` (at offset {metavar.pos})')
@@ -105,9 +110,12 @@ class APIHandler(object):
         self.apis[name] = (comm_type, inp, out, path)
         self.flush()
 
-    def adapter(self, name, adapter, value):
+    def adapter(self, name, adapter, value, env=None):
         vname, body = adapter
-        return eval(compile(body, name, 'eval', dont_inherit=True), {'strip_tags': strip_tags}, {})(value)
+        if env is None:
+            env = {}
+        env.update({'strip_tags': strip_tags})
+        return eval(compile(body, name, 'eval', dont_inherit=True), env, {})(value)
 
     def invoke(self, api, query):
         comm_type, inp, out, path = self.apis[api]
@@ -130,6 +138,14 @@ class APIHandler(object):
         if comm_type == 'http/json':
             path = self.metavarre.sub(urllib.parse.quote_plus(q), path)
             return DotDict({'x': requests.get(path).json()}).x
+        
+        if comm_type == 'html/xpath':
+            path = self.metavarre.sub(urllib.parse.quote_plus(q), path)
+            req = requests.get(path)
+            if req.status_code != 200:
+                raise Exception(f'{req.status_code}: {req.reason}')
+            xml = xhtml.fromstring(req.content)
+            return lambda x, xml=xml: xml.xpath(x)
 
         raise Exception(f'type {comm_type} not yet implemented')
     

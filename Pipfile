@@ -16,6 +16,7 @@ requests = "*"
 pycurl = "*"
 beautifulsoup4 = "*"
 nltk = "*"
+lxml = "*"
 
 [requires]
 python_version = "3.7"
