@@ -1,3 +1,5 @@
+import ast
+import astor
 import re
 import requests
 import json 
@@ -10,6 +12,22 @@ import urllib
 from html.parser import HTMLParser
 from lxml import html as xhtml
 
+
+def subv(xbody, iotype, name):
+    xast = ast.parse(xbody, f'{iotype}:{name}.body', 'single').body[0]
+    if isinstance(xast, ast.Assign):
+        if isinstance(xast.value, ast.Compare) and len(xast.value.ops) == 1 and isinstance(xast.value.ops[0], ast.In):
+            # x = y in z -> (lambda x: z)(y)
+            rast : ast.Call = ast.parse('x(y)', f'{iotype}:{name}.replacement_body', 'eval').body # call(...)
+            targets = xast.targets[0]
+            if isinstance(targets, ast.Tuple):
+                targets = targets.elts
+            else:
+                targets = [targets]
+            rast.func = ast.Lambda(ast.arguments([ast.arg(x, None) for x in targets], None,None,None,None,[]) , (lambda x: x if len(targets) == 1 else ast.Starred(x)) (xast.value.comparators[0]))
+            rast.args = [xast.value.left]
+            xast = rast
+    return astor.to_source(xast)
 
 class MLStripper(HTMLParser):
     def __init__(self):
@@ -84,6 +102,7 @@ class APIHandler(object):
         xbody = self.metavarre.sub(vname, body)
         if not xbody:
             xbody = vname
+        xbody = subv(xbody, iotype, name)
         body = f'lambda {vname}: {xbody}'
         compile(body, f'{iotype}:{name}', 'eval', dont_inherit=True)
 

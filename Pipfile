@@ -17,6 +17,7 @@ pycurl = "*"
 beautifulsoup4 = "*"
 nltk = "*"
 lxml = "*"
+astor = "*"
 
 [requires]
 python_version = "3.7"

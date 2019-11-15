@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "2345284341a617166e558c861519d0122cdbb3af57abdf1ac6214c730a176c83"
+            "sha256": "ece11408eb1bb80601fce774a4a5e0ec3fd6eaa0a451d255d6c300ad623ecb8e"
         },
         "pipfile-spec": 6,
         "requires": {
@@ -16,6 +16,14 @@
         ]
     },
     "default": {
+        "astor": {
+            "hashes": [
+                "sha256:0e41295809baf43ae8303350e031aff81ae52189b6f881f36d623fa8b2f1960e",
+                "sha256:37a6eed8b371f1228db08234ed7f6cfdc7817a3ed3824797e20cbb11dc2a7862"
+            ],
+            "index": "pypi",
+            "version": "==0.8.0"
+        },
         "beautifulsoup4": {
             "hashes": [
                 "sha256:5279c36b4b2ec2cb4298d723791467e3000e5384a43ea0cdf5d45207c7e97169",
