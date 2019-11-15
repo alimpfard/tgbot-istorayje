@@ -81,7 +81,7 @@ class APIHandler(object):
             'http/link',
             'http/json',
         )
-        self.metavarre = re.compile(r'(?!\\)\$(\w+)')
+        self.metavarre = re.compile(r'(?!\\)\$([\w:]+)')
 
     def flush(self):
         self.bot.db.db.external_apis.update_one({'kind': 'api'}, {'$set': {'data': self.apis}}, upsert=True)
