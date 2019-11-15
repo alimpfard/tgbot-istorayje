@@ -68,16 +68,15 @@ class TypeCastTransformationVisitor(ast.NodeTransformer):
         return self
 
     def visit_BinOp(self, node: ast.BinOp):
-        self.generic_visit(node.left)
-
         if isinstance(node.op, ast.MatMult) and isinstance(node.right, ast.Name):
+            self.generic_visit(node)
             # x @ty -> transform
             if node.right.id.lower() == 'json':
                 self.uses['json'] = True
-                return ast.copy_location(ast.Call(func='global_to_json', args=[node.left]), node)
+                return ast.copy_location(ast.Call(func=ast.Name('global_to_json'), args=[node.left], keywords=[]), node)
         else:
             # not a name, visit it
-            self.generic_visit(node.right)
+            self.generic_visit(node)
         
         return node
 
