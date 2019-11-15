@@ -154,6 +154,7 @@ class APIHandler(object):
             xbody = vname
         print('> ', xbody)
         xbody = astor.to_source(self.visitor.start().visit(subv(xbody, iotype, name)))
+        print('> ', xbody)
         body = f'lambda {vname}: {xbody}'
         compile(body, f'{iotype}:{name}', 'eval', dont_inherit=True)
 
