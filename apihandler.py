@@ -182,6 +182,10 @@ class APIHandler(object):
                 raise Exception(f'{req.status_code}: {req.reason}')
             xml = xhtml.fromstring(req.content)
             return lambda x, xml=xml: xml.xpath(x)
+        
+        if comm_type == 'graphql':
+            req = requests.post(path, json={'query': q, 'vars': {}}).json()
+            return DotDict({'x': req}).x
 
         raise Exception(f'type {comm_type} not yet implemented')
     
