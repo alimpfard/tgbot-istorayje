@@ -69,6 +69,7 @@ class APIHandler(object):
         self.output_adapters = None
         self.apis = None
         self.load()
+        self.res = {}
         self.ios = {
             'input': self.input_adapters,
             'output': self.output_adapters,
@@ -91,15 +92,30 @@ class APIHandler(object):
         self.apis = (self.bot.db.db.external_apis.find_one({'kind': 'api'}) or {'data': {}})['data']
         self.input_adapters = (self.bot.db.db.external_apis.find_one({'kind': 'input'}) or {'data': {}})['data']
         self.output_adapters = (self.bot.db.db.external_apis.find_one({'kind': 'output'}) or {'data': {}})['data']
+    
+    def gmetavarre(self, name):
+        if name in self.res:
+            return self.res[name]
+        mre = re.compile(f'(?!\\\\)\\$({name})')
+        self.res[name] = mre
+        return mre
 
     def define(self, iotype, name, vname, body):
         if name in self.ios[iotype]:
             raise Exception(f'duplicate {iotype} IO {name}')
-
+        
+        replacements = set()
         for metavar in self.metavarre.finditer(body):
             if metavar.group(1) != vname:
-                raise Exception(f'Unknown meta variable `{matavar.group(1)}` (at offset {metavar.pos})')
-        xbody = self.metavarre.sub(vname, body)
+                if metavar.group(1) in self.ios[iotype]:
+                    replacements.add(metavar.group(1))
+                else:
+                    raise Exception(f'Unknown meta variable `{metavar.group(1)}` (at offset {metavar.pos})')
+        xbody = self.gmetavarre(vname).sub(vname, body)
+        
+        for r in replacements:
+            xbody = self.gmetavarre(r).sub(f'({self.ios[iotype][r]})', xbody)
+
         if not xbody:
             xbody = vname
         xbody = subv(xbody, iotype, name)
@@ -124,7 +140,7 @@ class APIHandler(object):
         
         for metavar in self.metavarre.finditer(path):
             if metavar.group(1) != 'result':
-                raise Exception(f'Unknown meta variable `{matavar.group(1)}` (at offset {metavar.pos})')
+                raise Exception(f'Unknown meta variable `{metavar.group(1)}` (at offset {metavar.pos})')
 
         self.apis[name] = (comm_type, inp, out, path)
         self.flush()
