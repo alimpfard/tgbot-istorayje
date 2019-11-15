@@ -1603,6 +1603,7 @@ class IstorayjeBot:
                 del self.external_api_handler.ios[iotype][name]
                 self.external_api_handler.define(iotype, name, vname, ' '.join(req))
                 update.message.reply_text(f'registered {iotype} adapter {name} as `{" ".join(req)}`({vname})')
+                return
             elif cmd == 'define':
                 # define [input/output] <name> <vname> ...request_body
                 if len(args) < 3:
@@ -1614,6 +1615,29 @@ class IstorayjeBot:
                     return
                 self.external_api_handler.define(iotype, name, vname, ' '.join(req))
                 update.message.reply_text(f'registered {iotype} adapter {name} as `{" ".join(req)}`({vname})')
+                return
+            elif cmd == 'list':
+                if len(args) < 1:
+                    update.message.reply_text(f'invalid number of arguments, expected 1 argument (list [api/io/input/output])')
+                    return
+                arg = args[0]
+                if arg == "api":
+                    update.message.reply_text('\n'.join(
+                        f'{x}: ({v[0]}) input<{v[1]}> output<{v[2]}> = {v[3]}' for x,v in self.external_api_handler.apis.items()
+                    ))
+                    return
+                elif arg == "input":
+                    update.message.reply_text('\n'.join(
+                        f'{x}' for x in self.external_api_handler.input_adapters
+                    ))
+                    return
+                elif arg == "output":
+                    update.message.reply_text('\n'.join(
+                        f'{x}' for x in self.external_api_handler.output_adapters
+                    ))
+                    return
+                else:
+                    update.message.reply_text(f'unknown subcommand {arg}')
             else:
                 update.message.reply_text('unknown command')
                 return
