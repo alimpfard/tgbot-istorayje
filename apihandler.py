@@ -65,6 +65,7 @@ class TypeCastTransformationVisitor(ast.NodeTransformer):
         self.uses = {
             'json': False,
         }
+        return self
 
     def visit_BinOp(self, node: ast.BinOp):
         self.generic_visit(node.left)
