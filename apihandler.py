@@ -118,9 +118,9 @@ class APIHandler(object):
 
         if not xbody:
             xbody = vname
+        print('> ', xbody)
         xbody = subv(xbody, iotype, name)
         body = f'lambda {vname}: {xbody}'
-        print('> ', body)
         compile(body, f'{iotype}:{name}', 'eval', dont_inherit=True)
 
         self.ios[iotype][name] = (vname, body)
