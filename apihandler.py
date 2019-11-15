@@ -27,7 +27,13 @@ def subv(xbody, iotype, name):
             rast.func = ast.Lambda(ast.arguments([ast.arg(x, None) for x in targets], None,None,None,None,[]) , (lambda x: x if len(targets) == 1 else ast.Starred(x)) (xast.value.comparators[0]))
             rast.args = [xast.value.left]
             xast = rast
-    return astor.to_source(xast)
+    return xast
+
+def to_json(x):
+    return json.dumps(x)
+
+def from_json(x):
+    return DotDict({'x': json.loads(x)}).x
 
 class MLStripper(HTMLParser):
     def __init__(self):
@@ -49,6 +55,32 @@ def strip_tags(html):
     print('stripped:', x)
     return x.strip()
 
+class TypeCastTransformationVisitor(ast.NodeTransformer):
+    def __init__(self):
+        self.uses = {
+            'json': False,
+        }
+
+    def start(self):
+        self.uses = {
+            'json': False,
+        }
+
+    def visit_BinOp(self, node: ast.BinOp):
+        self.generic_visit(node.left)
+
+        if isinstance(node.op, ast.MatMult) and isinstance(node.right, ast.Name):
+            # x @ty -> transform
+            if node.right.id.lower() == 'json':
+                self.uses['json'] = True
+                return ast.copy_location(ast.Call(func='global_to_json', args=[node.left]), node)
+        else:
+            # not a name, visit it
+            self.generic_visit(node.right)
+        
+        return node
+
+
 class DotDict(dict):
     __getattr__ = dict.__getitem__
     __setattr__ = dict.__setitem__
@@ -64,6 +96,7 @@ class DotDict(dict):
 
 class APIHandler(object):
     def __init__(self, bot):
+        self.visitor = TypeCastTransformationVisitor()
         self.bot = bot
         self.input_adapters = None
         self.output_adapters = None
@@ -119,11 +152,11 @@ class APIHandler(object):
         if not xbody:
             xbody = vname
         print('> ', xbody)
-        xbody = subv(xbody, iotype, name)
+        xbody = astor.to_source(self.visitor.start().visit(subv(xbody, iotype, name)))
         body = f'lambda {vname}: {xbody}'
         compile(body, f'{iotype}:{name}', 'eval', dont_inherit=True)
 
-        self.ios[iotype][name] = (vname, body)
+        self.ios[iotype][name] = (vname, body, self.visitor.uses)
         self.flush()
 
     def tgwrap(self, query, stuff):
@@ -147,9 +180,14 @@ class APIHandler(object):
         self.flush()
 
     def adapter(self, name, adapter, value, env=None):
-        vname, body = adapter
+        vname, body, *uses = adapter
         if env is None:
             env = {}
+        if len(uses) > 0:
+            uses = uses[0]
+            if 'json' in uses and uses['json']:
+                env.update({'global_to_json': to_json})
+        
         env.update({'strip_tags': strip_tags})
         return eval(compile(body, name, 'eval', dont_inherit=True), env, {})(value)
 
