@@ -22,8 +22,13 @@ def deepdan(image_data, *args):
 XPATH = '/html/body/div/div/div/div[1]/div[1]/table/tbody/tr'
 
 def split(x):
-    tag, score = [x.strip() for x in x.split(' ')]
-    return (tag, float(score))
+    print(x)
+    tagscore = [x.strip() for x in x.split(' ')]
+    if len(tagscore) > 1:
+        tag, score = tagscore
+        return (tag, float(score))
+    else:
+        return (tagscore, 1)
 
 def deepdan_parse(content):
     xml = xhtml.fromstring(content)
