@@ -268,7 +268,7 @@ class IstorayjeBot:
                 extra = details['links']
 
             elif doc['service'] == 'dan':
-                details = deepdan(doc['filecontent'])
+                details = deepdan(doc['filecontent'], doc['mime'])
                 if not details:
                     resp = doc['response_id']
                     self.updater.bot.edit_message_text(
