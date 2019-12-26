@@ -292,7 +292,7 @@ class IstorayjeBot:
                     print('similarity cap hit, just use first')
                     continue
 
-                ins_tags = [x[0] for x in doclist]
+                instags = [x[0] for x in doclist]
 
             elif doc['service'] == 'anime':
                 details = getTraceAPIDetails(doc['filecontent'])
