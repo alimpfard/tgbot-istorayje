@@ -292,7 +292,7 @@ class IstorayjeBot:
                     print('similarity cap hit, just use first')
                     continue
 
-                ins_tags = [x[0] for x in doclist]
+                instags = [x[0] for x in doclist]
 
             elif doc['service'] == 'anime':
                 details = getTraceAPIDetails(doc['filecontent'])
@@ -672,6 +672,8 @@ class IstorayjeBot:
                                 continue
                             if effect == 'distort':
                                 extra['arguments'] = aparse(extra.get('arguments', ''))
+                            if effect == 'text':
+                                extra['text'] = extra.get('text', None)
                             operations[op].append({
                                 'frame': {
                                     'start': {
