@@ -520,7 +520,6 @@ class IstorayjeBot:
                 if not mime:
                     mime = doc.mime_type
                 print('got doc', doc)
-                insert['mime'] = mime
 
                 google = tag == 'google'
                 insert['similarity_cap'] = int(
