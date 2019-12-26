@@ -281,6 +281,7 @@ class IstorayjeBot:
 
                 # what the fuck?
                 doclist = sorted(filter(lambda x: x[1] >= doc['similarity_cap'], details), key=lambda x: x[1], reverse=True)
+                print(doclist, details)
                 if not doclist:
                     resp = doc['response_id']
                     self.updater.bot.edit_message_text(
@@ -291,7 +292,7 @@ class IstorayjeBot:
                     print('similarity cap hit, just use first')
                     continue
 
-                ins_tags = doclist
+                ins_tags = [x[0] for x in doclist]
 
             elif doc['service'] == 'anime':
                 details = getTraceAPIDetails(doc['filecontent'])
