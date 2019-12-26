@@ -16,6 +16,7 @@ from googleimgsearch import searchGoogleImages
 from trace import getTraceAPIDetails
 from extern import pke_tagify, store_image, get_some_frame, process_gifops
 from anilist import *
+from deepdan import deepdan
 
 from db import DB
 import re
@@ -266,8 +267,33 @@ class IstorayjeBot:
                 instags = [x[0] for x in res if x[1] >= 100*doc['similarity_cap']]
                 extra = details['links']
 
-            elif doc['service'] == 'anime':
+            elif doc['service'] == 'dan':
+                details = deepdan(doc['filecontent'])
+                if not details:
+                    resp = doc['response_id']
+                    self.updater.bot.edit_message_text(
+                        'Rejected: deepdan query had no results',
+                        chat_id=resp[1],
+                        message_id=resp[0],
+                    )
+                    print('no response')
+                    continue
 
+                # what the fuck?
+                doclist = sorted(filter(lambda x: x[1] >= doc['similarity_cap'], details), key=lambda x: x[1], reverse=True)
+                if not doclist:
+                    resp = doc['response_id']
+                    self.updater.bot.edit_message_text(
+                        f'Completed: deepdan query results below set similarity ({doc["similarity_cap"]})',
+                        chat_id=resp[1],
+                        message_id=resp[0],
+                    )
+                    print('similarity cap hit, just use first')
+                    continue
+
+                ins_tags = doclist
+
+            elif doc['service'] == 'anime':
                 details = getTraceAPIDetails(doc['filecontent'])
                 if not details:
                     resp = doc['response_id']
@@ -476,7 +502,7 @@ class IstorayjeBot:
                 'insertion_paths': insertion_paths,
                 'users': users,
             }
-            if tag in ['google', 'anime']:
+            if tag in ['google', 'anime', 'dan']:
                 if early:
                     return None
                 doc = get_any(message, ['document', 'sticker', 'photo'])
