@@ -2,6 +2,7 @@ import requests
 import json
 from lxml import html as xhtml
 import magic
+import re
 
 POST_URL = 'http://kanotype.iptime.org:8003/deepdanbooru/upload'
 Mime = magic.Magic(mime=True)
@@ -20,10 +21,10 @@ def deepdan(image_data, *args):
     return deepdan_parse(req.content)
 
 XPATH = '/html/body/div/div/div/div[1]/div[1]/table/tbody/tr'
-
+SPLIT_RE = re.compile(r'\s+')
 def split(x):
-    print(x)
-    tagscore = [x.strip() for x in x.split(' ')]
+    x = x.strip()
+    tagscore = SPLIT_RE.split(x)
     if len(tagscore) > 1:
         tag, score = tagscore
         return (tag, float(score))
