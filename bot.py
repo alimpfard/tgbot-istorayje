@@ -1402,7 +1402,7 @@ class IstorayjeBot:
                     for mshare in share:
                         self.db.db.storage.update_one(
                             {'user_id': update.inline_query.from_user.id},
-                            {'$set': {'collection.' + mshare: share[mshare]}},
+                            {'$set': {'collection.' + mshare: share[mshare][0]}}, # This is stored as an array
                             upsert=True)
                 possible_update = self.db.db.late_share.find_one_and_delete({'username': update.inline_query.from_user.username})
 
