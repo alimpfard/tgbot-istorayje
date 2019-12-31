@@ -1508,13 +1508,11 @@ class IstorayjeBot:
                 results.append(
                     InlineQueryResultArticle(
                         id=uuid4(),
-                        title='no temp set, "/temp <temp_chat_username>" in the bot chat',
+                        title='no temp set, some results might not be available',
                         input_message_content=InputTextMessageContent(
-                            'This user is actually dumb')
+                            'no temp is set, "/temp <temp_chat_username>" in the bot chat')
                     )
                 )
-                cachetime = 0
-                colls = []
             else:
                 tempid = tempid['id']
 
@@ -1530,7 +1528,7 @@ class IstorayjeBot:
                         cmsg['caption'] = fcaption if fcaption not in ['$def', '$default', '$'] else col[2]
                         cloned_message = self.clone_messaage_with_data(
                             cmsg, col[1])
-                    else:
+                    elif tempid:
                         print('cache miss for message', col[0], ('(cache was stale) ::' if col[3] else '::'), 'trying to load it')
                         msg = bot.forward_message(
                             chat_id=tempid,
