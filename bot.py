@@ -170,6 +170,7 @@ class IstorayjeBot:
             CommandHandler('rehash', self.rehash_all),
             CommandHandler('help', self.help),
             CommandHandler('magics', self.help_magics),
+            CommandHandler('share', self.share),
             ChosenInlineResultHandler(self.on_result_chosen),
             InlineQueryHandler(self.handle_query,
                                pass_user_data=True, pass_chat_data=True),
@@ -1393,6 +1394,16 @@ class IstorayjeBot:
         try:
             coll, query, extra = self.parse_query(update.inline_query.query)
             coll = self.resolve_alias(coll, update.inline_query.from_user.id)
+            possible_update = self.db.db.late_share.find_one_and_delete({'username': update.message.from_user.username})
+            if possible_update:
+                # someone has shared stuff with this guy
+                shares = possible_update['shares']
+                for share in shares:
+                    self.db.db.storage.update_one(
+                            {'user_id': update.message.from_user.id},
+                            {'$set': {'collection.' + share + '.index': shares[share]}},
+                            upsert=True)
+
             if coll.startswith('@'):
                 # external sources
                 return self.external_source_handler({'source': coll[1:], 'query': ' '.join(update.inline_query.query.strip().split(' ')[1:])}, bot, update, user_data, chat_data)
@@ -1596,6 +1607,53 @@ class IstorayjeBot:
         update.message.reply_text(
             'set temp storage to ' + username
         )
+    def share(self, bot, update):
+        # share <collection> with <@username|id>
+        command = update.message.text[len('/share '):]
+        try:
+            coll, _, user_id, *_ = command.split(' ')
+            try:
+                coll = self.resolve_alias(coll, update.message.from_user.id)
+                colls = list(x for x in
+                         self.db.db.storage.aggregate([
+                             {'$match': {
+                                 'user_id': update.inline_query.from_user.id
+                             }
+                             },
+                             {'$project': {
+                                 "index": '$collection.' + coll + '.index',
+                                 '_id': 0
+                             }
+                             },
+                         ]))
+                if not colls:
+                    raise Exception('ENOTFOUND')
+                # we have the collection to share
+                # now to insert it under the target
+                mcoll = (update.message.from_user.username or 'id' + update.message.from_user.id) + '-' + coll
+                if user_id.startswith('@'):
+                    # username, add it to a different db, and resolve it later
+                    self.db.db.late_share.update_one(
+                            {'username': user_id[1:]},
+                            {'$addToSet': {'shares': {mcoll: colls}}},
+                            upsert=True)
+                    update.message.reply_text(f'Shared collection {coll} with username {user_id}, they will receive it as soon as they try to access it (under name {mcoll})')
+                else:
+                    # user id
+                    self.db.db.storage.update_one(
+                            {'user_id': user_id},
+                            {'collection.' + mcoll + 'index': colls},
+                            upsert=True)
+                    update.message.reply_text(f'Shared collection {coll} with user {user_id} as {mcoll}')
+            except:
+                update.message.reply_text(
+                    f'Unknown collection {coll}, you can\'t share that which you do not have'
+                )
+        except:
+            update.message.reply_text(
+                'Invalid command format, use /share <collection> with <@username|id>'
+            )
+
     def handle_api(self, bot, update):
         ssubcommand = update.message.text[len('/api '):]
         cmd, *args = ssubcommand.split(' ')
