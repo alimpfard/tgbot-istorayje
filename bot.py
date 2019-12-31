@@ -1645,7 +1645,10 @@ class IstorayjeBot:
                     # user id
                     self.db.db.storage.update_one(
                             {'user_id': user_id},
-                            {'collection.' + mcoll + 'index': colls},
+                            {
+                                '$set': {'collection.' + mcoll: colls[0]},
+                                '$set': {'last_used.' + mcoll: []}
+                            },
                             upsert=True)
                     update.message.reply_text(f'Shared collection {coll} with user {user_id} as {mcoll}')
             except Exception as e:
