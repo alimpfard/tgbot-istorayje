@@ -1403,8 +1403,8 @@ class IstorayjeBot:
                         self.db.db.storage.update_one(
                             {'user_id': update.inline_query.from_user.id},
                             {
-                                '$set': {'collection.' + mshare: share[mshare][0]},# This is stored as an array
-                                '$set': {'last_used.' + mshare: []}
+                                '$set': {'collection.' + mshare: share[mshare][0], # This is stored as an array
+                                'last_used.' + mshare: []}
                             },
                             upsert=True)
                 possible_update = self.db.db.late_share.find_one_and_delete({'username': update.inline_query.from_user.username})
@@ -1646,8 +1646,7 @@ class IstorayjeBot:
                     self.db.db.storage.update_one(
                             {'user_id': int(user_id)},
                             {
-                                '$set': {'collection.' + mcoll: colls[0]},
-                                '$set': {'last_used.' + mcoll: []}
+                                '$set': {'collection.' + mcoll: colls[0], 'last_used.' + mcoll: []}
                             },
                             upsert=True)
                     update.message.reply_text(f'Shared collection {coll} with user {user_id} as {mcoll}')
