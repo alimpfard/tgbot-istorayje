@@ -1395,15 +1395,16 @@ class IstorayjeBot:
             coll, query, extra = self.parse_query(update.inline_query.query)
             coll = self.resolve_alias(coll, update.inline_query.from_user.id)
             possible_update = self.db.db.late_share.find_one_and_delete({'username': update.inline_query.from_user.username})
-            if possible_update:
+            while possible_update:
                 # someone has shared stuff with this guy
                 shares = possible_update['shares']
                 for share in shares:
                     for mshare in share:
                         self.db.db.storage.update_one(
                             {'user_id': update.inline_query.from_user.id},
-                            {'$set': {'collection.' + share + '.index': share[mshare]}},
+                            {'$set': {'collection.' + mshare + '.index': share[mshare]}},
                             upsert=True)
+                possible_update = self.db.db.late_share.find_one_and_delete({'username': update.inline_query.from_user.username})
 
             if coll.startswith('@'):
                 # external sources
