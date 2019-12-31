@@ -1644,7 +1644,7 @@ class IstorayjeBot:
                 else:
                     # user id
                     self.db.db.storage.update_one(
-                            {'user_id': user_id},
+                            {'user_id': int(user_id)},
                             {
                                 '$set': {'collection.' + mcoll: colls[0]},
                                 '$set': {'last_used.' + mcoll: []}
