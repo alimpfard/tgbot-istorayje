@@ -1645,7 +1645,8 @@ class IstorayjeBot:
                             {'collection.' + mcoll + 'index': colls},
                             upsert=True)
                     update.message.reply_text(f'Shared collection {coll} with user {user_id} as {mcoll}')
-            except:
+            except Exception as e:
+                print('cannot share', coll, 'because', e)
                 update.message.reply_text(
                     f'Unknown collection {coll}, you can\'t share that which you do not have'
                 )
