@@ -1873,7 +1873,7 @@ class IstorayjeBot:
             '           + zoom - zoom in to (dx, dy)\n'
             '           + rotate - rotate around (dx, dy)\n'
             '           + text - place (prop: `text`) at position (dx, dy)\n'
-            '             extras: `[color:<fill color>] [outline:<stroke color>] [background:<background color>] [shadow:<shadow color>]\n'
+            '             extras: `[color:<fill color>] [outline:<stroke color>] [background:<background color>] [shadow:<shadow color>]`\n'
             '             not specifying `shadow` and `background` will disable them\n'
             '           + overlay-points - overlay key point positions\n'
             '           + distort - apply various distortions (TODO)\n'
