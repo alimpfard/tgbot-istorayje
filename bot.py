@@ -1617,7 +1617,7 @@ class IstorayjeBot:
                 colls = list(x for x in
                          self.db.db.storage.aggregate([
                              {'$match': {
-                                 'user_id': update.inline_query.from_user.id
+                                 'user_id': update.message.from_user.id
                              }
                              },
                              {'$project': {
