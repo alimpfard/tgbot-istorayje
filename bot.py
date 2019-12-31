@@ -644,7 +644,7 @@ class IstorayjeBot:
                             mux = False
                             dx, dy = 0, 0
                             # animate frame:[number]/[unit] length:[number]/[unit] effect:[name] dx:[number] dy:[number] (multiplex) (word:word)
-                            asv = [x.replace('\x04', ' ') for x in opt[8:].replace('\\ ', '\x04').split(' ')]
+                            asv = [x.replace('\x04', ' ') for x in opt[8:].replace('^ ', '\x04').split(' ')]
                             extra = {}
                             for optv in asv:
                                 if optv == 'multiplex':
@@ -675,7 +675,8 @@ class IstorayjeBot:
                                 extra['arguments'] = aparse(extra.get('arguments', ''))
 
                             if effect == 'text':
-                                extra['text'] = extra.get('text', None)
+                                for prop in ['text', 'font-size']:
+                                    extra[prop] = extra.get(prop, None)
 
                             operations[op].append({
                                 'frame': {
@@ -1865,6 +1866,15 @@ class IstorayjeBot:
             '      - optional mixed literal _speed {speed}_ (takes a float modifier _speed_) <literal>: modifies the speed of the GIF\n'
             '      - optional mixed literal _skip {value} <ti|fr|%>_ (takes an int modifier _value_) <literal>: skips the provided {value} units from the start\n'
             '      - optional mixed literal _early {value} <ti|fr|%>_ (takes an int modifier _value_) <literal>: cuts off the provided {value} units from the end\n'
+            '      - optional mixed literal _animate frame:[number]/[unit] length:[number]/[unit] effect:[name] dx:[number] dy:[number] (multiplex) (word:word)_\n'
+            '           note: to escape spaces in e.g. \'text\', use `^ ` (that is, caret-space)\n'
+            '           effects:\n'
+            '           + scroll - scroll in direction (dx, dy)\n'
+            '           + zoom - zoom in to (dx, dy)\n'
+            '           + rotate - rotate around (dx, dy)\n'
+            '           + text - place (prop: `text`) at position (dx, dy)\n'
+            '           + overlay-points - overlay key point positions\n'
+            '           + distort - apply various distortions (TODO)\n'
             '  short forms:\n'
             '      None\n'
             '  document types:\n'
