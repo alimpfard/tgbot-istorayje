@@ -1402,7 +1402,7 @@ class IstorayjeBot:
                     for mshare in share:
                         self.db.db.storage.update_one(
                             {'user_id': update.inline_query.from_user.id},
-                            {'$set': {'collection.' + mshare + '.index': share[mshare]}},
+                            {'$set': {'collection.' + mshare: share[mshare]}},
                             upsert=True)
                 possible_update = self.db.db.late_share.find_one_and_delete({'username': update.inline_query.from_user.username})
 
@@ -1616,14 +1616,14 @@ class IstorayjeBot:
             coll, _, user_id, *_ = command.split(' ')
             try:
                 coll = self.resolve_alias(coll, update.message.from_user.id)
-                colls = list(x for x in
+                colls = list(x['collection'] for x in
                          self.db.db.storage.aggregate([
                              {'$match': {
                                  'user_id': update.message.from_user.id
                              }
                              },
                              {'$project': {
-                                 "index": '$collection.' + coll + '.index',
+                                 "collection": '$collection.' + coll,
                                  '_id': 0
                              }
                              },
