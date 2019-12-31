@@ -644,7 +644,7 @@ class IstorayjeBot:
                             mux = False
                             dx, dy = 0, 0
                             # animate frame:[number]/[unit] length:[number]/[unit] effect:[name] dx:[number] dy:[number] (multiplex) (word:word)
-                            asv = opt[8:].split(' ')
+                            asv = [x.replace('\x04', ' ') for x in opt[8:].replace('\\ ', '\x04').split(' ')]
                             extra = {}
                             for optv in asv:
                                 if optv == 'multiplex':
@@ -670,10 +670,13 @@ class IstorayjeBot:
                             print('animate', effect, dx, dy, length, frame, extra)
                             if not effect:
                                 continue
+
                             if effect == 'distort':
                                 extra['arguments'] = aparse(extra.get('arguments', ''))
+
                             if effect == 'text':
                                 extra['text'] = extra.get('text', None)
+
                             operations[op].append({
                                 'frame': {
                                     'start': {
@@ -1311,7 +1314,7 @@ class IstorayjeBot:
 
     def render_api(self, api, reqs, res):
         return self.external_api_handler.render(api, res)
-    
+
     def has_api(self, user, api):
         return api in self.external_api_handler.apis
 
@@ -1624,7 +1627,7 @@ class IstorayjeBot:
             elif cmd == 'redefine':
                 # redefine [input/output] <name> <vname> ...request_body
                 if len(args) < 3:
-                    update.message.reply_text(f'invalid number of arguments, expected at least 3 arguments (define [input/output] <name> <vname> ...request_body), but got {len(args)}') 
+                    update.message.reply_text(f'invalid number of arguments, expected at least 3 arguments (define [input/output] <name> <vname> ...request_body), but got {len(args)}')
                     return
                 iotype, name, vname, *req = args
                 if iotype not in ['input', 'output']:
@@ -1637,7 +1640,7 @@ class IstorayjeBot:
             elif cmd == 'define':
                 # define [input/output] <name> <vname> ...request_body
                 if len(args) < 3:
-                    update.message.reply_text(f'invalid number of arguments, expected at least 3 arguments (define [input/output] <name> <vname> ...request_body), but got {len(args)}') 
+                    update.message.reply_text(f'invalid number of arguments, expected at least 3 arguments (define [input/output] <name> <vname> ...request_body), but got {len(args)}')
                     return
                 iotype, name, vname, *req = args
                 if iotype not in ['input', 'output']:
