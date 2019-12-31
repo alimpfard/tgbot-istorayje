@@ -1399,9 +1399,10 @@ class IstorayjeBot:
                 # someone has shared stuff with this guy
                 shares = possible_update['shares']
                 for share in shares:
-                    self.db.db.storage.update_one(
+                    for mshare in share:
+                        self.db.db.storage.update_one(
                             {'user_id': update.inline_query.from_user.id},
-                            {'$set': {'collection.' + share + '.index': shares[share]}},
+                            {'$set': {'collection.' + share + '.index': share[mshare]}},
                             upsert=True)
 
             if coll.startswith('@'):
