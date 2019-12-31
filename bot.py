@@ -1832,6 +1832,18 @@ class IstorayjeBot:
             '  further notes:\n'
             '      Cropped images of anime will likely yield incorrect results\n',
 
+
+            '`$dan` - use a neural net to guess image contents (uses danbooru tags)\n'
+            '  stage 2\n'
+            '  arguments:\n'
+            '       - position _minimum accepted accuracy_ <int>: results with confidence less than this will be ignored\n'
+            '  short forms:\n'
+            '      None\n'
+            '  document types:\n'
+            '      media documents <image, video, GIF>\n'
+            '  further notes:\n'
+            '      Geared towards animated/drawn images, but has shown to perform reasonably well on real images too\n',
+
             '`$synonyms` - find and add synonyms or related words\n'
             '  stage 1\n'
             '  arguments:\n'
