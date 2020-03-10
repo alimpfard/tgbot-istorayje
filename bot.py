@@ -14,6 +14,7 @@ from telegram.ext import ChosenInlineResultHandler
 # from googlecloud import getCloudAPIDetails
 from googleimgsearch import searchGoogleImages
 from saucenao import searchSauceNao
+from iqdb import searchIqdb
 from trace import getTraceAPIDetails
 from extern import pke_tagify, store_image, get_some_frame, process_gifops
 from anilist import *
@@ -270,8 +271,9 @@ class IstorayjeBot:
                 extra = details['links']
 
             elif doc['service'] == 'sauce':
-                print('saucenao', doc)
-                details = searchSauceNao(self.updater.bot.get_file(doc['fileid'])._get_encoded_url())
+                sub = doc['sub_service']
+                print(sub, doc)
+                details = (searchIqdb if sub == 'iqdb' else searchSauceNao)(self.updater.bot.get_file(doc['fileid'])._get_encoded_url())
                 if not details:
                     resp = doc['response_id']
                     self.updater.bot.edit_message_text(
@@ -588,6 +590,9 @@ class IstorayjeBot:
                     return None  # shrug
 
                 insert['service'] = tag
+                if tag == 'sauce':
+                    insert['sub_service'] = 'saucenao' if len(targs) < 2 else targs[1]
+
             elif tag in ['caption', 'default_caption', 'defcap', 'defcaption', 'cap']:
                 if early:
                     return None
