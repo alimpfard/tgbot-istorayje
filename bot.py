@@ -269,7 +269,7 @@ class IstorayjeBot:
                 instags = [x[0] for x in res if x[1] >= 100*doc['similarity_cap']]
                 extra = details['links']
 
-            if doc['service'] == 'sauce':
+            elif doc['service'] == 'sauce':
                 print('saucenao', doc)
                 details = searchSauceNao(self.updater.bot.get_file(doc['fileid'])._get_encoded_url())
                 if not details:
@@ -291,7 +291,7 @@ class IstorayjeBot:
                     )
                     continue
                 instags = res
-                extra = [x['title'] + ': ' + x['content'] + '\n' for x in req]
+                extra = [x['title'] + ': ' + x['content'] + '\n' for x in details]
 
             elif doc['service'] == 'dan':
                 details = deepdan(doc['filecontent'], doc['mime'])
