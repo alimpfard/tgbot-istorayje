@@ -46,7 +46,7 @@ def handle(node):
     return {'similarity': float(mi[:-1 - len(' similarity')]), 'title': ti, 'content': co}
     
 def iqdb_parse(content):
+    print('iqdb says', content)
     xml = xhtml.fromstring(content)
     xps = xml.xpath(XPATH)
-    print(xps)
     return list(filter(lambda x: x, [handle(x) for x in xps]))

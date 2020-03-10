@@ -294,7 +294,7 @@ class IstorayjeBot:
                     )
                     continue
                 instags = [x[0] for x in res if x[1] >= 100*doc['similarity_cap']]
-                extra = [x['title'] + ':\n' + x['content'].split('\n').join('\n\t') + '\n\n' for x in details]
+                extra = [x['title'] + ':\n' + '\n\t'.join(x['content'].split('\n')) + '\n\n' for x in details]
 
             elif doc['service'] == 'dan':
                 details = deepdan(doc['filecontent'], doc['mime'])
