@@ -290,7 +290,7 @@ class IstorayjeBot:
                         message_id=resp[0],
                     )
                     continue
-                instags = res
+                instags = [x[0] for x in res if x[1] >= 100*doc['similarity_cap']]
                 extra = [x['title'] + ': ' + x['content'] + '\n' for x in details]
 
             elif doc['service'] == 'dan':
