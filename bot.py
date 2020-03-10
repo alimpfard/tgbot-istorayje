@@ -274,6 +274,7 @@ class IstorayjeBot:
                 sub = doc['sub_service']
                 print(sub, doc)
                 details = (searchIqdb if sub == 'iqdb' else searchSauceNao)(self.updater.bot.get_file(doc['fileid'])._get_encoded_url())
+                print(details)
                 if not details:
                     resp = doc['response_id']
                     self.updater.bot.edit_message_text(

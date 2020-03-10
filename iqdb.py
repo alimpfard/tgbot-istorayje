@@ -48,4 +48,5 @@ def handle(node):
 def iqdb_parse(content):
     xml = xhtml.fromstring(content)
     xps = xml.xpath(XPATH)
+    print(xps)
     return list(filter(lambda x: x, [handle(x) for x in xps]))
