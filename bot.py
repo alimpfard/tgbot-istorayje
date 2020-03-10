@@ -549,7 +549,7 @@ class IstorayjeBot:
                     mime = doc.mime_type
                 print('got doc', doc)
 
-                google = tag == 'google'
+                google = tag in ['google', 'sauce']
                 insert['similarity_cap'] = int(
                     targs[0])/100 if len(targs) else 0.6
 
@@ -1921,6 +1921,18 @@ class IstorayjeBot:
             '      media documents <image, video, GIF>\n'
             '  further notes:\n'
             '      Cropped images of anime will likely yield incorrect results\n',
+
+
+            '`$sauce` - search for image source (SauceNao)\n'
+            '  stage 2\n'
+            '  arguments:\n'
+            '       - position _minimum accepted accuracy_ <int>: results with confidence less than this will be ignored\n'
+            '  short forms:\n'
+            '      None\n'
+            '  document types:\n'
+            '      media documents <image, video, GIF>\n'
+            '  further notes:\n'
+            '      May return multiple equal sources, and sources may have no links\n',
 
 
             '`$dan` - use a neural net to guess image contents (uses danbooru tags)\n'
