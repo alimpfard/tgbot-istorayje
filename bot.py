@@ -13,6 +13,7 @@ from telegram import (
 from telegram.ext import ChosenInlineResultHandler
 # from googlecloud import getCloudAPIDetails
 from googleimgsearch import searchGoogleImages
+from saucenao import searchSauceNao
 from trace import getTraceAPIDetails
 from extern import pke_tagify, store_image, get_some_frame, process_gifops
 from anilist import *
@@ -268,6 +269,30 @@ class IstorayjeBot:
                 instags = [x[0] for x in res if x[1] >= 100*doc['similarity_cap']]
                 extra = details['links']
 
+            if doc['service'] == 'sauce':
+                print('saucenao', doc)
+                details = searchSauceNao(self.updater.bot.get_file(doc['fileid'])._get_encoded_url())
+                if not details:
+                    resp = doc['response_id']
+                    self.updater.bot.edit_message_text(
+                        'Failed: sauce query had no results',
+                        chat_id=resp[1],
+                        message_id=resp[0],
+                    )
+                    continue
+                req = [x['title'] for x in details if x['similarity'] >= 100 * doc['similarity_cap']]
+                res = pke_tagify(req)
+                if not res:
+                    resp = doc['response_id']
+                    self.updater.bot.edit_message_text(
+                        'Failed: sauce query had no usable tags',
+                        chat_id=resp[1],
+                        message_id=resp[0],
+                    )
+                    continue
+                instags = res
+                extra = [x['title'] + ': ' + x['content'] + '\n' for x in req]
+
             elif doc['service'] == 'dan':
                 details = deepdan(doc['filecontent'], doc['mime'])
                 if not details:
@@ -355,6 +380,7 @@ class IstorayjeBot:
 
                 instags = [x[0] for x in res if x[1] >= doc['similarity_cap']]
                 instags = instags + docv['synonyms']
+                extra = [docv['title_romaji'], docv['title_english'], docv['anime']]
 
                 if docv['is_adult']:
                     instags.push('nsfw')
@@ -505,7 +531,7 @@ class IstorayjeBot:
                 'users': users,
                 'mime': None,
             }
-            if tag in ['google', 'anime', 'dan']:
+            if tag in ['google', 'anime', 'dan', 'sauce']:
                 if early:
                     return None
                 doc = get_any(message, ['document', 'sticker', 'photo'])
