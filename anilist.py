@@ -385,34 +385,32 @@ def simple_query(terms=None, _query=None, litquery=None):
         }
         ''' if _query is None else '''
             query {
-                Page(page:1, perPage:10) {
-                    media(''' + _query + ''') {
-                        id
-                        title {
-                            romaji
-                            native
-                            english
-                        }
-                        type
-                        format
-                        status
-                        description
-                        season
-                        startDate { year }
-                        episodes
-                        duration
-                        coverImage {
-                            medium
-                            large
-                        }
-                        genres
-                        isAdult
-                        tags { name }
-                        airingSchedule {
-                            nodes {
-                                timeUntilAiring
-                                episode
-                            }
+                Media(''' + _query + ''') {
+                    id
+                    title {
+                        romaji
+                        native
+                        english
+                    }
+                    type
+                    format
+                    status
+                    description
+                    season
+                    startDate { year }
+                    episodes
+                    duration
+                    coverImage {
+                        medium
+                        large
+                    }
+                    genres
+                    isAdult
+                    tags { name }
+                    airingSchedule {
+                        nodes {
+                            timeUntilAiring
+                            episode
                         }
                     }
                 }
