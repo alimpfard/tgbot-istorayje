@@ -2,7 +2,7 @@ import ast
 import astor
 import re
 import requests
-import json 
+import json
 from telegram import (
     InlineQueryResultArticle, ParseMode, InputTextMessageContent
 )
@@ -77,7 +77,7 @@ class TypeCastTransformationVisitor(ast.NodeTransformer):
         else:
             # not a name, visit it
             self.generic_visit(node)
-        
+
         return node
 
 
@@ -125,7 +125,7 @@ class APIHandler(object):
         self.apis = (self.bot.db.db.external_apis.find_one({'kind': 'api'}) or {'data': {}})['data']
         self.input_adapters = (self.bot.db.db.external_apis.find_one({'kind': 'input'}) or {'data': {}})['data']
         self.output_adapters = (self.bot.db.db.external_apis.find_one({'kind': 'output'}) or {'data': {}})['data']
-    
+
     def gmetavarre(self, name):
         if name in self.res:
             return self.res[name]
@@ -136,7 +136,7 @@ class APIHandler(object):
     def define(self, iotype, name, vname, body):
         if name in self.ios[iotype]:
             raise Exception(f'duplicate {iotype} IO {name}')
-        
+
         replacements = set()
         for metavar in self.metavarre.finditer(body):
             if metavar.group(1) != vname:
@@ -145,7 +145,7 @@ class APIHandler(object):
                 else:
                     raise Exception(f'Unknown meta variable `{metavar.group(1)}` (at offset {metavar.pos})')
         xbody = self.gmetavarre(vname).sub(vname, body)
-        
+
         for r in replacements:
             xbody = self.gmetavarre(r).sub(f'({self.ios[iotype][r][1]})', xbody)
 
@@ -172,7 +172,7 @@ class APIHandler(object):
     def declare(self, name, comm_type, inp, out, path):
         if name in self.apis:
             raise Exception(f'duplicate API name {name}')
-        
+
         for metavar in self.metavarre.finditer(path):
             if metavar.group(1) != 'result':
                 raise Exception(f'Unknown meta variable `{metavar.group(1)}` (at offset {metavar.pos})')
@@ -188,7 +188,7 @@ class APIHandler(object):
             uses = uses[0]
             if 'json' in uses and uses['json']:
                 env.update({'global_to_json': to_json})
-        
+
         env.update({'strip_tags': strip_tags})
         return eval(compile(body, name, 'eval', dont_inherit=True), env, {})(value)
 
@@ -196,7 +196,7 @@ class APIHandler(object):
         comm_type, inp, out, path = self.apis[api]
         if inp not in self.input_adapters:
             raise Exception(f'Undefined input adapter {inp}')
-        
+
         if out not in self.output_adapters:
             raise Exception(f'Undefined ouput adapter {out}')
 
@@ -206,14 +206,16 @@ class APIHandler(object):
         if comm_type == 'http/link':
             path = self.metavarre.sub(urllib.parse.quote_plus(q), path)
             return path
-        
+
         if comm_type == 'json/post':
-            return DotDict({'x':requests.post(path, data=q).json()}).x
-        
+            path = self.metavarre.sub(q.get('pvalue', ''), path)
+            res = requests.post(path, data=q.get('value', {}))
+            return DotDict({'x':res.json()}).x
+
         if comm_type == 'http/json':
             path = self.metavarre.sub(urllib.parse.quote_plus(q), path)
             return DotDict({'x': requests.get(path).json()}).x
-        
+
         if comm_type == 'html/xpath':
             path = self.metavarre.sub(urllib.parse.quote_plus(q), path)
             req = requests.get(path)
@@ -221,16 +223,16 @@ class APIHandler(object):
                 raise Exception(f'{req.status_code}: {req.reason}')
             xml = xhtml.fromstring(req.content)
             return lambda x, xml=xml: xml.xpath(x)
-        
+
         if comm_type == 'graphql':
             req = requests.post(path, json={'query': q, 'vars': {}}).json()
             return DotDict({'x': req}).x
 
         raise Exception(f'type {comm_type} not yet implemented')
-    
+
     def render(self, api, value):
         comm_type, inp, out, path = self.apis[api]
-        
+
         outv = self.output_adapters[out]
         q = self.adapter(out, outv, value)
         return self.tgwrap(api, q)

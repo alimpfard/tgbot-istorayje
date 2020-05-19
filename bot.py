@@ -2003,7 +2003,71 @@ class IstorayjeBot:
             '      GIFs\n'
             '  further notes:\n'
             '      operation order is (first to last):\n'
-            '          skip|early, reverse, speed\n'
+            '          skip|early, reverse, speed\n',
+            '''/api documentation
+
+the available subcommands are
+
+- list {api/input/output}
+    List the required API handlers
+
+- define {input/output} {name} {varname} ...request in API DSL
+    Defines the named adapter with the provided varname,
+    for input adapters, the variable refers to the query (as a string)
+    for output adapters, the variable refers to the response, parsed if possible
+
+- redefine (same args as define)
+    Overwrites an existing adapter
+
+- declare {name} {comm type} {input adapter} {output adapter} {api path}
+    Declares an API endpoint, accessible via the @{name} external collection
+    comm type will be defined later
+    api path may refer to the result of {input adapter} as result
+
+- redeclare (same args as declare)
+    Overwrites a declared api
+
+API handler documentation
+
+Comm types
+
+the available comm types are:
+- http/link
+    metavar in url: Yes
+    response type: string
+    behaviour: simply substitutes the metavar in the URL
+    expected input adapter output: string
+
+- json/post
+    metavar in url: Yes, through input.pvalue
+    response type: Dictionary
+    behvaiour: substitutes the metavar, sends a post request, returns output
+    expected input adapter output: {pvalue: string, value: T}
+
+- html/xpath
+    metavar in url: Yes
+    response type: Dictionary
+    behvaiour: substitutes the metavar, sends a get request, returns output
+    expected input adapter output: string
+
+- graphql
+    metavar in url: No
+    response type: T
+    behaviour: sends the metavar as a gql query
+    expected input adapter output: T'
+
+
+DSL Documentation
+
+A single python expression with the following extensions
+
+- expr @json - jsonifies expr
+- ${metavar} - replaced with the value of the metavar
+
+
+Output Adapter Documentation
+
+All output adapters must evaluate to an array of 2-tuples of the form (result name, result text), both of which should be strings.'''
         ]
         for i in index:
             update.message.reply_text(
