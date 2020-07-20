@@ -4,7 +4,8 @@ import re
 import requests
 import json
 from telegram import (
-    InlineQueryResultArticle, ParseMode, InputTextMessageContent
+    InlineQueryResultArticle, ParseMode, InputTextMessageContent,
+    InlineQueryResultPhoto, InlineQueryResultGif
 )
 from uuid import uuid4
 import urllib
@@ -31,6 +32,19 @@ def subv(xbody, iotype, name):
 
 def to_json(x):
     return json.dumps(x)
+
+class InternalPhoto:
+    def __init__(self, url, thumb_url=None, caption=None):
+        self.url = url
+        self.caption = caption
+        self.thumb_url = thumb_url or url
+
+def construct_image(obj):
+    if isinstance(obj, str):
+        return InternalPhoto(obj)
+    if isinstance(obj, dict):
+        return InternalPhoto(**obj)
+    raise Exception("Invalid kind for @image " + type(obj))
 
 def from_json(x):
     return DotDict({'x': json.loads(x)}).x
@@ -59,11 +73,13 @@ class TypeCastTransformationVisitor(ast.NodeTransformer):
     def __init__(self):
         self.uses = {
             'json': False,
+            'query': False,
         }
 
     def start(self):
         self.uses = {
             'json': False,
+            'query': False,
         }
         return self
 
@@ -74,6 +90,9 @@ class TypeCastTransformationVisitor(ast.NodeTransformer):
             if node.right.id.lower() == 'json':
                 self.uses['json'] = True
                 return ast.copy_location(ast.Call(func=ast.Name('global_to_json'), args=[node.left], keywords=[]), node)
+            elif node.right.id.lower() == 'image':
+                self.uses['query'] = True
+                return ast.copy_location(ast.Call(func=ast.Name('global_construct_image'), args=[node.left], keywords=[]), node)
         else:
             # not a name, visit it
             self.generic_visit(node)
@@ -161,13 +180,29 @@ class APIHandler(object):
         self.flush()
 
     def tgwrap(self, query, stuff):
-        return [
-            InlineQueryResultArticle(
-                id=uuid4(),
-                title=f"result {k}",
-                input_message_content=InputTextMessageContent(x)
+        def convert_to_result(uuid, k, x):
+            if isinstance(x, str):
+                return InlineQueryResultArticle(
+                    id=uuid,
+                    title=f"result {k}",
+                    input_message_content=InputTextMessageContent(x)
+                )
+            if isinstance(x, InternalPhoto):
+                return InlineQueryResultPhoto(
+                    id=uuid,
+                    title=f"result {k}",
+                    photo_url=x.url,
+                    thumb_url=x.thumb_url,
+                    caption=x.caption
+                )
+            return InlineQueryResultArticle(
+                id=uuid,
+                title=f'{k} - Unknown result type',
+                input_message_content=InputTextMessageContent(to_json(x))
             )
-        for k,x in stuff]
+
+
+        return [ convert_to_result(uuid4(), k, x) for k,x in stuff]
 
     def declare(self, name, comm_type, inp, out, path):
         if name in self.apis:
@@ -188,6 +223,8 @@ class APIHandler(object):
             uses = uses[0]
             if 'json' in uses and uses['json']:
                 env.update({'global_to_json': to_json})
+            if 'query' in uses and uses['query']:
+                env.update({'global_construct_image': construct_image})
 
         env.update({'strip_tags': strip_tags})
         return eval(compile(body, name, 'eval', dont_inherit=True), env, {})(value)

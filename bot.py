@@ -1757,14 +1757,10 @@ class IstorayjeBot:
                     ))
                     return
                 elif arg == "input":
-                    update.message.reply_text('\n'.join(
-                        f'{x}' for x in self.external_api_handler.input_adapters
-                    ))
+                    [update.message.reply_text(f'{x}\n{y}\n') for x,y in self.external_api_handler.input_adapters.items()]
                     return
                 elif arg == "output":
-                    update.message.reply_text('\n'.join(
-                        f'{x}' for x in self.external_api_handler.output_adapters
-                    ))
+                    [update.message.reply_text(f'{x}\n{y}\n') for x,y in self.external_api_handler.output_adapters.items()]
                     return
                 else:
                     update.message.reply_text(f'unknown subcommand {arg}')
