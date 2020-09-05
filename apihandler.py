@@ -182,6 +182,7 @@ class APIHandler(object):
     def tgwrap(self, query, stuff):
         def convert_to_result(uuid, k, x):
             if isinstance(x, str):
+                print(x)
                 return InlineQueryResultArticle(
                     id=uuid,
                     title=f"result {k}",
