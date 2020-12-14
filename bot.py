@@ -917,7 +917,11 @@ class IstorayjeBot:
             try:
                 username = '@' + update.channel_post.chat.username
             except:
-                print('uhhhh...🤷‍♀️')
+                try:
+                    username = str(update.effective_user.id)
+                except:
+                    print('uhhhh...🤷‍♀️')
+                    return
         users = [x['chat'] for x in self.db.db.cindex.aggregate([
             {'$match': {'index': {'$exists': username}}},
             {'$project': {'_id': 0, 'chat': '$index.' + username}},
