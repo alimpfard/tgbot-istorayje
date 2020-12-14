@@ -500,7 +500,7 @@ class IstorayjeBot:
                 )
 
         if self.db.db.tag_updates.count_documents({}) != 0:
-            self.updater.job_queue.run_once(self.process_insertions, timedelta(seconds=30)) # todo: based on load
+            self.updater.job_queue.run_once(self.process_insertions, timedelta(seconds=5)) # todo: based on load
     def sample(self, iterator, k):
         result = [next(iterator) for _ in range(k)]
 
