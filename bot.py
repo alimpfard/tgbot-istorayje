@@ -1739,16 +1739,16 @@ class IstorayjeBot:
                 update.message.reply_text(f'registered {iotype} adapter {name} as `{" ".join(req)}`({vname})')
                 return
             elif cmd == 'define':
-                # define [input/output] <name> <vname> ...request_body
-                if len(args) < 3:
-                    update.message.reply_text(f'invalid number of arguments, expected at least 3 arguments (define [input/output] <name> <vname> ...request_body), but got {len(args)}')
+                # define [input/output] <name> <type> <vname> ...request_body
+                if len(args) < 4:
+                    update.message.reply_text(f'invalid number of arguments, expected at least 4 arguments (define [input/output] <name> <type> <vname> ...request_body), but got {len(args)}')
                     return
-                iotype, name, vname, *req = args
+                iotype, name, _type, vname, *req = args
                 if iotype not in ['input', 'output']:
                     update.message.reply_text(f'invalid io type {iotype}, expected either `input` or `output`')
                     return
-                self.external_api_handler.define(iotype, name, vname, ' '.join(req))
-                update.message.reply_text(f'registered {iotype} adapter {name} as `{" ".join(req)}`({vname})')
+                self.external_api_handler.define(iotype, name, _type, vname, ' '.join(req))
+                update.message.reply_text(f'registered {iotype} adapter({_type}) {name} as `{" ".join(req)}`({vname})')
                 return
             elif cmd == 'list':
                 if len(args) < 1:

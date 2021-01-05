@@ -152,7 +152,7 @@ class APIHandler(object):
         self.res[name] = mre
         return mre
 
-    def define(self, iotype, name, vname, body):
+    def define(self, iotype, name, _type, vname, body):
         if name in self.ios[iotype]:
             raise Exception(f'duplicate {iotype} IO {name}')
 
@@ -166,7 +166,7 @@ class APIHandler(object):
         xbody = self.gmetavarre(vname).sub(vname, body)
 
         for r in replacements:
-            xbody = self.gmetavarre(r).sub(f'({self.ios[iotype][r][1]})', xbody)
+            xbody = self.gmetavarre(r).sub(f'({self.ios[iotype][r][2]})', xbody)
 
         if not xbody:
             xbody = vname
@@ -176,17 +176,17 @@ class APIHandler(object):
         body = f'lambda {vname}: {xbody}'
         compile(body, f'{iotype}:{name}', 'eval', dont_inherit=True)
 
-        self.ios[iotype][name] = (vname, body, self.visitor.uses)
+        self.ios[iotype][name] = (vname, _type, body, self.visitor.uses)
         self.flush()
 
-    def tgwrap(self, query, stuff):
+    def tgwrap(self, query, _type, stuff):
         def convert_to_result(uuid, k, x):
             if isinstance(x, str):
                 print(x)
                 return InlineQueryResultArticle(
                     id=uuid,
                     title=f"result {k}",
-                    input_message_content=InputTextMessageContent(x, parse_mode='Markdown')
+                    input_message_content=InputTextMessageContent(x, parse_mode={'markdown': 'Markdown', 'html': 'HTML'}.get(_type))
                 )
             if isinstance(x, InternalPhoto):
                 return InlineQueryResultPhoto(
@@ -217,7 +217,7 @@ class APIHandler(object):
         self.flush()
 
     def adapter(self, name, adapter, value, env=None):
-        vname, body, *uses = adapter
+        vname, _type, body, *uses = adapter
         if env is None:
             env = {}
         if len(uses) > 0:
@@ -228,7 +228,7 @@ class APIHandler(object):
                 env.update({'global_construct_image': construct_image})
 
         env.update({'strip_tags': strip_tags})
-        return eval(compile(body, name, 'eval', dont_inherit=True), env, {})(value)
+        return (_type, eval(compile(body, name, 'eval', dont_inherit=True), env, {})(value))
 
     def invoke(self, api, query):
         comm_type, inp, out, path = self.apis[api]
@@ -240,7 +240,7 @@ class APIHandler(object):
 
         inpv = self.input_adapters[inp]
 
-        q = self.adapter(inp, inpv, query)
+        _, q = self.adapter(inp, inpv, query)
         if comm_type == 'http/link':
             path = self.metavarre.sub(urllib.parse.quote_plus(q), path)
             return path
@@ -272,5 +272,5 @@ class APIHandler(object):
         comm_type, inp, out, path = self.apis[api]
 
         outv = self.output_adapters[out]
-        q = self.adapter(out, outv, value)
-        return self.tgwrap(api, q)
+        _type, q = self.adapter(out, outv, value)
+        return self.tgwrap(api, q, _type)
