@@ -1726,17 +1726,17 @@ class IstorayjeBot:
                 self.external_api_handler.declare(name, comm_type, inp, out, path)
                 update.message.reply_text(f'registered api {name} as {path}, with input {inp} and output {out} for you.\nnow define the IOs')
             elif cmd == 'redefine':
-                # redefine [input/output] <name> <vname> ...request_body
-                if len(args) < 3:
-                    update.message.reply_text(f'invalid number of arguments, expected at least 3 arguments (define [input/output] <name> <vname> ...request_body), but got {len(args)}')
+                # redefine [input/output] <name> <type> <vname> ...request_body
+                if len(args) < 4:
+                    update.message.reply_text(f'invalid number of arguments, expected at least 4 arguments (define [input/output] <name> <type> <vname> ...request_body), but got {len(args)}')
                     return
-                iotype, name, vname, *req = args
+                iotype, name, _type, vname, *req = args
                 if iotype not in ['input', 'output']:
                     update.message.reply_text(f'invalid io type {iotype}, expected either `input` or `output`')
                     return
                 del self.external_api_handler.ios[iotype][name]
-                self.external_api_handler.define(iotype, name, vname, ' '.join(req))
-                update.message.reply_text(f'registered {iotype} adapter {name} as `{" ".join(req)}`({vname})')
+                self.external_api_handler.define(iotype, name, vname, _type, ' '.join(req))
+                update.message.reply_text(f'registered {iotype} adapter({_type}) {name} as `{" ".join(req)}`({vname})')
                 return
             elif cmd == 'define':
                 # define [input/output] <name> <type> <vname> ...request_body

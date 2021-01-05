@@ -218,6 +218,7 @@ class APIHandler(object):
 
     def adapter(self, name, adapter, value, env=None):
         vname, _type, body, *uses = adapter
+        print(vname, _type, body)
         if env is None:
             env = {}
         if len(uses) > 0:
@@ -273,4 +274,4 @@ class APIHandler(object):
 
         outv = self.output_adapters[out]
         _type, q = self.adapter(out, outv, value)
-        return self.tgwrap(api, q, _type)
+        return self.tgwrap(api, _type, q)
