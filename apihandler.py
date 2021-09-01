@@ -223,10 +223,11 @@ class APIHandler(object):
             env = {}
         if len(uses) > 0:
             uses = uses[0]
-            if 'json' in uses and uses['json']:
-                env.update({'global_to_json': to_json})
-            if 'query' in uses and uses['query']:
-                env.update({'global_construct_image': construct_image})
+            if uses:
+                if 'json' in uses and uses['json']:
+                    env.update({'global_to_json': to_json})
+                if 'query' in uses and uses['query']:
+                    env.update({'global_construct_image': construct_image})
 
         env.update({'strip_tags': strip_tags})
         return (_type, eval(compile(body, name, 'eval', dont_inherit=True), env, {})(value))
