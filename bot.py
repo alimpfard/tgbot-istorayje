@@ -154,9 +154,8 @@ class IstorayjeBot:
         PORT = int(os.environ.get("PORT", "8443"))
         HEROKU_APP_NAME = os.environ.get("HEROKU_APP_NAME")
         self.updater.start_webhook(
-            listen="0.0.0.0", port=PORT, url_path=self.token)
-        self.updater.bot.setWebhook(
-            "https://{}.herokuapp.com/{}".format(HEROKU_APP_NAME, self.token))
+            listen="0.0.0.0", port=PORT, url_path=self.token,
+            webhook_url="https://{}.herokuapp.com/{}".format(HEROKU_APP_NAME, self.token))
         self.updater.idle()
 
     def create_handlers(self):
