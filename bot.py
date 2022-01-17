@@ -19,6 +19,7 @@ from trace import getTraceAPIDetails
 from extern import pke_tagify, store_image, get_some_frame, process_gifops
 from anilist import *
 from deepdan import deepdan
+from pytimeparse.timeparse import timeparse
 
 from db import DB
 import re
@@ -941,6 +942,9 @@ class IstorayjeBot:
         reset = False
         remove = False
         query = False
+        extern = False
+        extern_schedule = None
+        extern_query = None
 
         try:
             text = msg.text
@@ -961,9 +965,37 @@ class IstorayjeBot:
             elif text.startswith('^tags?'):
                 query = True
                 users = [msg.from_user.id]
+            elif text.startswith('.ext '):
+                extern = True
+                rest = text[5:]
+                users = []
+                if rest.startswith('.schedule '):
+                    rest = rest[10:]
+                    extern_schedule, extern_query = rest.split(' ', maxsplit=1)
+                else:
+                    extern_query = rest
 
         except Exception:
             pass
+
+        if extern:
+            if extern_schedule:
+                tp = timeparse(extern_schedule)
+                if not tp:
+                    msg.reply_text(f"Invalid time spec '{extern_schedule}'")
+                else:
+                    try:
+                        self.updater.job_queue.run_repeating(
+                            self.process_extern_request(extern_query, msg),
+                            tp
+                        )
+                        msg.reply_text(f"Will repeat {extern_query} every {tp} seconds!")
+                    except Exception as e:
+                        msg.reply_text(f"Error while processing request: {e}")
+
+            else:
+                self.process_extern_request(extern_query, msg)()
+
         for user in users:
             filterop = {}
             updateop = {}
@@ -1108,6 +1140,41 @@ class IstorayjeBot:
             except Exception as e:
                 traceback.print_exc()
                 print(e)
+
+    def process_extern_request(self, req: str, msg, bot):
+        # @each (req) (lines:it)
+        # query
+        def parse(x: str):
+            only_first = True
+            if x.startswith('.first '):
+                x = x[7:]
+                only_first = True
+            if x.startswith('@each '):
+                req, *xs = x[6:].splitlines()
+                if len(xs) == 0:
+                    raise Exception("@each (req) expects a list of things afterwards")
+                return ({"first": only_first}, [req.replace('(it)', x) for x in xs])
+            return ({"first": only_first}, x)
+
+        def process(parsed_req=parse(req)):
+            first = parsed_req[0]['first']
+            def do_respond(_):
+                def res(inline_query_results):
+                    # Extract raw results from the inline query results and reply with them
+                    for result in inline_query_results:
+                        if not hasattr(result, 'title'):
+                            continue
+
+                        content = result.input_message_content
+                        msg.reply_text(content.message_text, parse_mode=content.parse_mode)
+                        if first:
+                            break
+                return res
+
+            for req in parsed_req[1]:
+                self.handle_query(bot, (req, msg), respond=do_respond, read=lambda x: x[0], user=lambda x: x[1].from_user.id)
+
+        return process
 
     def handle_list_index(self, bot, update):
         coll = self.db.db.storage.find_one(filter={
@@ -1357,7 +1424,7 @@ class IstorayjeBot:
         return api in self.external_api_handler.apis
 
 
-    def external_source_handler(self, data: dict, bot, update, user_data=None, chat_data=None):
+    def external_source_handler(self, data: dict, bot, update, user_data=None, chat_data=None, respond=lambda x: x.inline_query.answer, read=lambda x: x.inline_query.query, user=lambda x: x.inline_query.from_user):
         try:
             coll, *ireqs = data['source'].split(':')
             ireqs = ':'.join(ireqs)
@@ -1365,7 +1432,7 @@ class IstorayjeBot:
             if coll == 'anilist':
                 if ireqs == 'ql':
                     # raw query
-                    update.inline_query.answer([
+                    respond(update)([
                         InlineQueryResultArticle(
                             id=uuid4(),
                             title="Raw request results for " + query,
@@ -1380,11 +1447,11 @@ class IstorayjeBot:
                         return
                     q0,q1 = match.group(1, 2)
 
-                    coll = self.db.client[f'temp_{update.inline_query.from_user.id}']
+                    coll = self.db.client[f'temp_{user(update).id}']
                     db = coll['temp']
                     db.insert_one(aniquery(q0, {}))
                     res = db.aggregate(json.loads(q1))
-                    update.inline_query.answer([
+                    respond(update)([
                         InlineQueryResultArticle(
                             id=uuid4(),
                             title="Aggregate request results for " + q0,
@@ -1393,23 +1460,23 @@ class IstorayjeBot:
                     ])
                     db.drop()
                 elif ireqs == 'id':
-                    update.inline_query.answer(iquery_render(query))
+                    respond(update)(iquery_render(query))
                 elif ireqs == 'one':
-                    update.inline_query.answer(qquery_render(query))
+                    respond(update)(qquery_render(query))
                 elif ireqs == 'bychar':
                     # find result by character
-                    update.inline_query.answer(cquery_render(query))
+                    respond(update)(cquery_render(query))
                 elif ireqs == 'char':
-                    update.inline_query.answer(charquery_render(query))
+                    respond(update)(charquery_render(query))
                 elif ireqs == '':
                     # simple query
-                    update.inline_query.answer(squery_render(data['query']))
+                    respond(update)(squery_render(data['query']))
                 else:
                     raise Exception(f'Arguments to source {coll} not understood ({ireqs})')
-            elif self.has_api(update.inline_query.from_user.id, coll):
+            elif self.has_api(user(update).id, coll):
                 try:
                     res = self.invoke(coll, ireqs, query)
-                    update.inline_query.answer(self.render_api(coll, ireqs, res))
+                    respond(update)(self.render_api(coll, ireqs, res))
                 except Exception as e:
                     raise Exception(f'Invalid API invocation: {e}')
             else:
@@ -1417,7 +1484,7 @@ class IstorayjeBot:
         except Exception as e:
             print(e)
             traceback.print_exc()
-            update.inline_query.answer([
+            respond(update)([
                 InlineQueryResultArticle(
                     id=uuid4(),
                     title=f'Exception <{e}> occured while processing {query} in external source {coll}',
@@ -1426,36 +1493,36 @@ class IstorayjeBot:
                 )
             ], cache_time=10)
 
-    def handle_query(self, bot, update, user_data=None, chat_data=None):
+    def handle_query(self, bot, update, user_data=None, chat_data=None, respond=lambda x: x.inline_query.answer, read=lambda x: x.inline_query.query, user=lambda x: x.inline_query.from_user):
         try:
-            coll, query, extra = self.parse_query(update.inline_query.query)
-            coll = self.resolve_alias(coll, update.inline_query.from_user.id)
-            possible_update = self.db.db.late_share.find_one_and_delete({'username': update.inline_query.from_user.username})
+            coll, query, extra = self.parse_query(read(update))
+            coll = self.resolve_alias(coll, user(update).id)
+            possible_update = self.db.db.late_share.find_one_and_delete({'username': user(update).username})
             while possible_update:
                 # someone has shared stuff with this guy
                 shares = possible_update['shares']
                 for share in shares:
                     for mshare in share:
                         self.db.db.storage.update_one(
-                            {'user_id': update.inline_query.from_user.id},
+                            {'user_id': user(update).id},
                             {
                                 '$set': {'collection.' + mshare: share[mshare][0], # This is stored as an array
                                 'last_used.' + mshare: []}
                             },
                             upsert=True)
-                possible_update = self.db.db.late_share.find_one_and_delete({'username': update.inline_query.from_user.username})
+                possible_update = self.db.db.late_share.find_one_and_delete({'username': user(update).username})
 
             if coll.startswith('@'):
                 # external sources
-                return self.external_source_handler({'source': coll[1:], 'query': ' '.join(update.inline_query.query.strip().split(' ')[1:])}, bot, update, user_data, chat_data)
+                return self.external_source_handler({'source': coll[1:], 'query': ' '.join(read(update).strip().split(' ')[1:])}, bot, update, user_data, chat_data, respond, read, user)
             fcaption = extra.get('caption', None)
-            print(update.inline_query.query, '->', repr(coll), repr(query), extra)
+            print(read(update), '->', repr(coll), repr(query), extra)
             if not coll or coll == '':
                 return
 
             print(coll, query)
             if any(x in coll for x in '$./[]'):
-                update.inline_query.answer(
+                respond(update)(
                     [InlineQueryResultArticle(id=uuid4(), title='Invalid collection name "' + coll + '"',
                                               input_message_content=InputTextMessageContent('This user is an actual idiot'))]
                 )
@@ -1465,7 +1532,7 @@ class IstorayjeBot:
             colls = list((x['index']['id'], x['index']['tags'], x['index'].get('caption', None), x['index'].get('cache_stale', False)) for x in
                          self.db.db.storage.aggregate([
                              {'$match': {
-                                 'user_id': update.inline_query.from_user.id
+                                 'user_id': user(update).id
                              }
                              },
                              {'$project': {
@@ -1496,12 +1563,12 @@ class IstorayjeBot:
                 )
             )]
             userdata = self.db.db.storage.find_one(
-                {'user_id': update.inline_query.from_user.id})
+                {'user_id': user(update).id})
             chatid = userdata['collection'][coll]['id']
             cachetime = 300
             if len(query) == 0:
                 last_used = self.db.db.storage.find_one({
-                    'user_id': update.inline_query.from_user.id
+                    'user_id': user(update).id
                 }, projection={
                     '_id': 0,
                     'collection': 0,
@@ -1521,7 +1588,7 @@ class IstorayjeBot:
                     results.append(self.clone_messaage_with_data(
                         cmsg, ['last', 'used']))
             if len(results) > 1:
-                update.inline_query.answer(
+                respond(update)(
                     results,
                     cache_time=20,
                     is_personal=True
@@ -1592,7 +1659,7 @@ class IstorayjeBot:
                                 f'This bot is actually dumb\nException: {e}')
                         )
                     )
-            update.inline_query.answer(
+            respond(update)(
                 results,
                 cache_time=cachetime,
                 is_personal=True
@@ -1600,7 +1667,7 @@ class IstorayjeBot:
         except Exception as e:
             print(e)
             traceback.print_exc()
-            update.inline_query.answer([
+            respond(update)([
                 InlineQueryResultArticle(
                     id=uuid4(),
                     title=f'Exception <{e}> occured while processing {query} in {coll}',
