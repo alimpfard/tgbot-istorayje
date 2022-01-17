@@ -985,7 +985,7 @@ class IstorayjeBot:
                 else:
                     try:
                         self.updater.job_queue.run_repeating(
-                            self.process_extern_request(extern_query, msg),
+                            self.process_extern_request(extern_query, msg, bot),
                             tp
                         )
                         msg.reply_text(f"Will repeat {extern_query} every {tp} seconds!")
@@ -993,7 +993,7 @@ class IstorayjeBot:
                         msg.reply_text(f"Error while processing request: {e}")
 
             else:
-                self.process_extern_request(extern_query, msg)()
+                self.process_extern_request(extern_query, msg, bot)()
 
         for user in users:
             filterop = {}
