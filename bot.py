@@ -1157,8 +1157,8 @@ class IstorayjeBot:
 
         def process(parsed_req=parse(req)):
             first = parsed_req[0]['first']
-            def do_respond(_):
-                def res(inline_query_results):
+            def do_respond(*_):
+                def res(inline_query_results, **_):
                     # Extract raw results from the inline query results and reply with them
                     for result in inline_query_results:
                         if not hasattr(result, 'title'):
@@ -1171,7 +1171,7 @@ class IstorayjeBot:
                 return res
 
             for req in parsed_req[1]:
-                self.handle_query(bot, (req, msg), respond=do_respond, read=lambda x: x[0], user=lambda x: x[1].from_user.id)
+                self.handle_query(bot, (req, msg), respond=do_respond, read=lambda x: x[0], user=lambda x: x[1].from_user)
 
         return process
 
