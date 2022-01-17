@@ -1,7 +1,7 @@
 from telegram.ext import (
     Updater, CommandHandler, InlineQueryHandler,
     MessageHandler,
-    Filters
+    Filters, Job
 )
 from telegram import (
     InlineQueryResultArticle, ParseMode,
@@ -11,6 +11,8 @@ from telegram import (
     InlineQueryResultCachedVoice,
 )
 from telegram.ext import ChosenInlineResultHandler
+import telegram
+
 # from googlecloud import getCloudAPIDetails
 from googleimgsearch import searchGoogleImages
 from saucenao import searchSauceNao
@@ -21,6 +23,8 @@ from anilist import *
 from deepdan import deepdan
 from pytimeparse.timeparse import timeparse
 
+from bson.objectid import ObjectId
+
 from db import DB
 import re
 import os
@@ -29,7 +33,7 @@ from uuid import uuid4, UUID
 import traceback
 import json
 import xxhash
-import pickle
+import dill as pickle
 from threading import Event
 from time import time
 import random
@@ -56,89 +60,72 @@ class IstorayjeBot:
         self.random = random.Random()
         self.token = token
         self.updater = Updater(token, use_context=False)
+        # Clear APScheduler jobs, they're weird
+        self.updater.job_queue.scheduler.remove_all_jobs()
+
         self.db = db
         self.external_api_handler = APIHandler(self)
         for handler in self.create_handlers():
             self.register_handler(handler)
         self.updater.dispatcher.add_error_handler(self.error)
 
-        if not self.restore_jobs():
-            # TODO: fix save_jobs fucking up
-            # self.updater.job_queue.run_repeating(
-                # self.save_jobs, timedelta(minutes=5))
-            self.updater.job_queue.run_repeating( # it will re-add itself based on load if more is required
-                self.process_insertions, (timedelta(minutes=1) if not dev else timedelta(seconds=10)))
+        self.restore_jobs(self.updater.bot)
+
+        self.updater.job_queue.run_repeating( # it will re-add itself based on load if more is required
+            self.process_insertions, (timedelta(minutes=1) if not dev else timedelta(seconds=10)))
 
         self.context = {}
 
-    def _dumpjobs(self, jq):
-        if jq:
-            job_tuples = jq._queue.queue
-        else:
-            job_tuples = []
+    def _transform_to_self_repeating_job(self, fn, job_id, period, args, kwargs, bot):
+        def f(_, _1, fn = fn, args = args, kwargs = kwargs, bot = bot, job_id = job_id):
+            try:
+                print("Invoking", fn, type(fn))
+                getattr(self, fn)(*args, **kwargs, bot=bot)
+            except Exception as e:
+                print(f'[Async Sched Error running {job_id}] {e}')
+                traceback.print_exc()
+            finally:
+                self.db.db.jobs.update_one({'_id': job_id}, {'$set': {'next_run': time() + period}})
+        return f
 
-        res_bins = []
-        for next_t, job in job_tuples:
-            # Back up objects
-            _job_queue = job._job_queue
-            _remove = job._remove
-            _enabled = job._enabled
+    def enqueue_repeating_task(self, fn, period, *args, **kwargs):
+        doc = self.db.db.jobs.insert_one({
+            'fn': fn,
+            'args': pickle.dumps(args),
+            'kwargs': pickle.dumps(kwargs),
+            'period': period,
+            'start_time': time(),
+            'next_run': time() + int(period),
+        })
+        self.updater.job_queue.run_once(
+            self._transform_to_self_repeating_job(fn, doc.inserted_id, period, args, kwargs, self.updater.bot), period, name=str(doc.inserted_id))
+        return doc.inserted_id
 
-            # Replace un-pickleable threading primitives
-            job._job_queue = None  # Will be reset in jq.put
-            removed = job.removed  # Convert to boolean
-            enabled = job.enabled  # Convert to boolean
-            job._enabled = enabled
-            job._remove = removed
-
-            # Pickle the job
-            res_bins.append(pickle.dumps((next_t, job)))
-
-            # Restore objects
-            job._job_queue = _job_queue
-            job._remove = _remove
-            job._enabled = _enabled
-
-        return res_bins
-
-    def save_jobs(self, *args, **kwargs):
-        self.db.db.jobs.find_one_and_replace(
-            {},
-            {'data': pickle.dumps(self._dumpjobs(self.updater.job_queue))},
-            upsert=True
-        )
-
-    def restore_jobs(self):
+    def restore_jobs(self, bot):
         jq = self.updater.job_queue
         now = time()
-        jobs = None
-
-        try:
-            jobs = self.db.db.jobs.find_one_and_delete({})['data']
-        except:
-            jobs = []
-
-        for picl in jobs:
-            next_t, job = pickle.loads(picl)
-
-            # Create threading primitives
-            enabled = job._enabled
-            removed = job._remove
-
-            job._enabled = Event()
-            job._remove = Event()
-
-            if enabled:
-                job._enabled.set()
-
-            if removed:
-                job._remove.set()
-
-            next_t -= now  # Convert from absolute to relative time
-
-            jq._put(job, next_t)
-
-        return jobs is not None and len(jobs) > 0
+        jobs = self.db.db.jobs.find({})
+        for job in jobs:
+            fn = job['fn']
+            args = pickle.loads(job['args'])
+            kwargs = pickle.loads(job['kwargs'])
+            job_id = job['_id']
+            next_run_from_now = job['next_run'] - now
+            print("Next run for", job_id, "is", next_run_from_now, "later")
+            if next_run_from_now <= 0:
+                next_from_now = next_run_from_now % job['period']
+                print("", "Which was overdue, and now is", next_from_now, "later")
+            next_from_now = int(next_from_now)
+            # Transform into a run_once job that will be re-added and will update the db entry
+            jq.run_once(self._transform_to_self_repeating_job(fn, job_id, job['period'], args, kwargs, bot), next_run_from_now, name = str(job_id))
+        
+    def cancel_repeating_task(self, task_id):
+        print('canceling job', task_id)
+        res = self.db.db.jobs.delete_one({'_id': ObjectId(task_id)})
+        print('', 'deleted', res.deleted_count)
+        for job in self.updater.job_queue.get_jobs_by_name(task_id):
+            job.schedule_removal()
+            print('', "removed job", job)
 
     def error(self, bot, update, error):
         print(f'[Error] Update {update} caused error {error}')
@@ -943,6 +930,7 @@ class IstorayjeBot:
         query = False
         extern = False
         extern_schedule = None
+        extern_unschedule = None
         extern_query = None
 
         try:
@@ -971,6 +959,8 @@ class IstorayjeBot:
                 if rest.startswith('.schedule '):
                     rest = rest[10:]
                     extern_schedule, extern_query = rest.split(' ', maxsplit=1)
+                elif rest.startswith('.unschedule '):
+                    extern_unschedule = rest[12:]
                 else:
                     extern_query = rest
 
@@ -978,23 +968,21 @@ class IstorayjeBot:
             pass
 
         if extern:
-            if extern_schedule:
+            if extern_unschedule:
+                self.cancel_repeating_task(extern_unschedule)
+            elif extern_schedule:
                 tp = timeparse(extern_schedule)
                 if not tp:
                     msg.reply_text(f"Invalid time spec '{extern_schedule}'")
                 else:
                     try:
-                        job = self.updater.job_queue.run_repeating(
-                            self.process_extern_request(extern_query, msg, bot),
-                            tp
-                        )
-                        msg.reply_text(f"Will repeat {extern_query} every {tp} seconds!\nuse {job.job.id} to refer to this job")
+                        job_id = self.enqueue_repeating_task('process_extern_request', tp, extern_query, msg.to_dict())
+                        msg.reply_text(f"Will repeat {extern_query} every {tp} seconds!\nuse {job_id} to refer to this job")
                     except Exception as e:
                         traceback.print_exc()
                         msg.reply_text(f"Error while processing request: {e}")
-
             else:
-                self.process_extern_request(extern_query, msg, bot)()
+                self.process_extern_request(extern_query, msg.to_dict(), bot)
 
         for user in users:
             filterop = {}
@@ -1141,7 +1129,8 @@ class IstorayjeBot:
                 traceback.print_exc()
                 print(e)
 
-    def process_extern_request(self, req: str, msg, bot):
+    def process_extern_request(self, req: str, msg: str, bot):
+        msg = telegram.Message.de_json(msg, bot)
         # @each (req) (lines:it)
         # query
         def parse(x: str):
@@ -1166,7 +1155,12 @@ class IstorayjeBot:
                             continue
 
                         content = result.input_message_content
-                        msg.reply_text(content.message_text, parse_mode=content.parse_mode)
+                        bot.send_message(
+                            chat_id=msg.chat.id,
+                            text=content.message_text,
+                            parse_mode=content.parse_mode,
+                            reply_to_message_id=msg.message_id,
+                        )
                         if first:
                             break
                 return res
@@ -1174,7 +1168,7 @@ class IstorayjeBot:
             for req in parsed_req[1]:
                 self.handle_query(bot, (req, msg), respond=do_respond, read=lambda x: x[0], user=lambda x: x[1].from_user)
 
-        return process
+        return process()
 
     def handle_list_index(self, bot, update):
         coll = self.db.db.storage.find_one(filter={

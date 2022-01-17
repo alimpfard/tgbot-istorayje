@@ -20,6 +20,7 @@ lxml = "*"
 astor = "*"
 python-magic = "*"
 pytimeparse = "*"
+dill = "*"
 
 [requires]
 python_version = "3.10"

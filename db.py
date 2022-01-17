@@ -5,4 +5,4 @@ class DB:
         self.client = MongoClient(url)
         self.db_name = name
         self.db = self.client[name]
-    
+
