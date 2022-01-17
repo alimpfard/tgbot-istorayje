@@ -984,12 +984,13 @@ class IstorayjeBot:
                     msg.reply_text(f"Invalid time spec '{extern_schedule}'")
                 else:
                     try:
-                        self.updater.job_queue.run_repeating(
+                        job = self.updater.job_queue.run_repeating(
                             self.process_extern_request(extern_query, msg, bot),
                             tp
                         )
-                        msg.reply_text(f"Will repeat {extern_query} every {tp} seconds!")
+                        msg.reply_text(f"Will repeat {extern_query} every {tp} seconds!\nuse {job.job.id} to refer to this job")
                     except Exception as e:
+                        traceback.print_exc()
                         msg.reply_text(f"Error while processing request: {e}")
 
             else:
@@ -1155,7 +1156,7 @@ class IstorayjeBot:
                 return ({"first": only_first}, [req.replace('(it)', x) for x in xs])
             return ({"first": only_first}, x)
 
-        def process(parsed_req=parse(req)):
+        def process(*args, parsed_req=parse(req), **kwargs):
             first = parsed_req[0]['first']
             def do_respond(*_):
                 def res(inline_query_results, **_):
