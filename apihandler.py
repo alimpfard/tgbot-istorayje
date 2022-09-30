@@ -186,7 +186,7 @@ class APIHandler(object):
                 return InlineQueryResultArticle(
                     id=uuid,
                     title=f"result {k}",
-                    input_message_content=InputTextMessageContent(x, parse_mode={'markdown': 'Markdown', 'html': 'HTML'}.get(_type))
+                    input_message_content=InputTextMessageContent(x, parse_mode={'markdown': 'Markdown', 'html': 'HTML'}.get(_type)),
                     thumb_url=None if len(rest) == 0 else rest[0]
                 )
             if isinstance(x, InternalPhoto):
