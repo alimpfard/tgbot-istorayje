@@ -180,13 +180,14 @@ class APIHandler(object):
         self.flush()
 
     def tgwrap(self, query, _type, stuff):
-        def convert_to_result(uuid, k, x):
+        def convert_to_result(uuid, k, x, rest):
             if isinstance(x, str):
                 print(x)
                 return InlineQueryResultArticle(
                     id=uuid,
                     title=f"result {k}",
                     input_message_content=InputTextMessageContent(x, parse_mode={'markdown': 'Markdown', 'html': 'HTML'}.get(_type))
+                    thumb_url=None if len(rest) == 0 else rest[0]
                 )
             if isinstance(x, InternalPhoto):
                 return InlineQueryResultPhoto(
@@ -203,7 +204,7 @@ class APIHandler(object):
             )
 
 
-        return [ convert_to_result(uuid4(), k, x) for k,x in stuff]
+        return [ convert_to_result(uuid4(), k, x, rest) for k,x,*rest in stuff]
 
     def declare(self, name, comm_type, inp, out, path):
         if name in self.apis:
