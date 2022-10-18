@@ -118,7 +118,7 @@ class IstorayjeBot:
             next_from_now = int(next_from_now)
             # Transform into a run_once job that will be re-added and will update the db entry
             jq.run_once(self._transform_to_self_repeating_job(fn, job_id, job['period'], args, kwargs, bot), next_run_from_now, name = str(job_id))
-        
+
     def cancel_repeating_task(self, task_id):
         print('canceling job', task_id)
         res = self.db.db.jobs.delete_one({'_id': ObjectId(task_id)})
@@ -139,10 +139,10 @@ class IstorayjeBot:
 
     def start_webhook(self):
         PORT = int(os.environ.get("PORT", "8443"))
-        HEROKU_APP_NAME = os.environ.get("HEROKU_APP_NAME")
+        APP_URL = os.environ.get("APP_URL")
         self.updater.start_webhook(
             listen="0.0.0.0", port=PORT, url_path=self.token,
-            webhook_url="https://{}.herokuapp.com/{}".format(HEROKU_APP_NAME, self.token))
+            webhook_url="{}/{}".format(APP_URL, self.token))
         self.updater.idle()
 
     def create_handlers(self):
