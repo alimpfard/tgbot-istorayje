@@ -1,4 +1,6 @@
 import ast
+from os import environ
+
 import astor
 import re
 import requests
@@ -9,10 +11,14 @@ from telegram import (
 )
 from uuid import uuid4
 import urllib
+from PIL import Image
 
 from html.parser import HTMLParser
 from lxml import html as xhtml
+from flask import Flask, request, make_response
+from threading import Thread
 
+import xxhash
 
 def subv(xbody, iotype, name):
     xast = ast.parse(xbody, f'{iotype}:{name}.body', 'single').body[0]
@@ -132,8 +138,39 @@ class APIHandler(object):
             'html/xpath',
             'http/link',
             'http/json',
+            'identity',
         )
         self.metavarre = re.compile(r'(?!\\)\$([\w:]+)')
+        self.server_thread = Thread(target=self.run_flask_server)
+        self.server_port = int(environ.get('PORT', '8080')) + 1
+        self.cached_images: dict[str, Image.Image] = {}
+
+    def run_flask_server(self):
+        app = Flask(__name__)
+
+        @app.route('/image/<hash>')
+        def get_image(hash):
+            if hash not in self.cached_images:
+                response = make_response('Nothing here mate')
+                response.status_code = 404
+                return response
+
+            response = make_response(self.cached_images[hash].tobytes('jpeg'))
+            response.content_type = 'image/jpg'
+            return response
+
+        @app.route('/thumb/<hash>')
+        def get_image(hash):
+            if hash not in self.cached_images:
+                response = make_response('Nothing here mate')
+                response.status_code = 404
+                return response
+
+            response = make_response(self.cached_images[hash].resize(size=(128, 128)).tobytes('jpeg'))
+            response.content_type = 'image/jpg'
+            return response
+
+        app.run(host='0.0.0.0', port=self.server_port, load_dotenv=False)
 
     def flush(self):
         self.bot.db.db.external_apis.update_one({'kind': 'api'}, {'$set': {'data': self.apis}}, upsert=True)
@@ -181,8 +218,8 @@ class APIHandler(object):
 
     def tgwrap(self, query, _type, stuff):
         def convert_to_result(uuid, k, x, rest):
+            print(x)
             if isinstance(x, str):
-                print(x)
                 return InlineQueryResultArticle(
                     id=uuid,
                     title=f"result {k}",
@@ -197,6 +234,32 @@ class APIHandler(object):
                     thumb_url=x.thumb_url,
                     caption=x.caption
                 )
+            if isinstance(x, Image.Image):
+                hash = xxhash.xxh64(x.tobytes()).digest().hex()
+                url = f"{environ.get('APP_URL')}:{self.server_port}/image/{hash}"
+                thumb_url = f"{environ.get('APP_URL')}:{self.server_port}/thumb/{hash}"
+
+                size = 0
+                for key in self.cached_images:
+                    size += len(self.cached_images[key].tobytes())
+                if size > 32 * 1024 * 1024:
+                    to_delete = size - 32 * 1024 * 1024
+                    while to_delete > 0 and len(self.cached_images) != 0:
+                        k = next(iter(self.cached_images))
+                        to_delete -= len(self.cached_images[k].tobytes())
+                        del self.cached_images[k]
+
+                self.cached_images[hash] = x
+
+                res = InlineQueryResultPhoto(
+                    id=uuid,
+                    title=f"result {k}",
+                    photo_url=url,
+                    thumb_url=thumb_url,
+                    caption=k,
+                )
+                print(res)
+                return res
             return InlineQueryResultArticle(
                 id=uuid,
                 title=f'{k} - Unknown result type',
@@ -222,6 +285,8 @@ class APIHandler(object):
         print(vname, _type, body)
         if env is None:
             env = {}
+        if 'Image' not in env:
+            env['Image'] = Image
         if len(uses) > 0:
             uses = uses[0]
             if uses:
@@ -244,6 +309,9 @@ class APIHandler(object):
         inpv = self.input_adapters[inp]
 
         _, q = self.adapter(inp, inpv, query)
+        if comm_type == 'identity':
+            return self.metavarre.sub(q, path)
+
         if comm_type == 'http/link':
             path = self.metavarre.sub(urllib.parse.quote_plus(q), path)
             return path
