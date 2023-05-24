@@ -1,25 +1,37 @@
-################################################################################
-# This requirements file has been automatically generated from `Pipfile` with
-# `pipenv-to-requirements`
-#
-#
-# This has been done to maintain backward compatibility with tools and services
-# that do not support `Pipfile` yet.
-#
-# Do NOT edit it directly, use `pipenv install [-d]` to modify `Pipfile` and
-# `Pipfile.lock` and then regenerate `requirements*.txt`.
-################################################################################
-
-astor
-beautifulsoup4
-dill
-dnspython
-lxml
-nltk
-pycurl
-pymongo
-python-magic
-python-telegram-bot
-pytimeparse
-requests
-xxhash
+-i https://pypi.org/simple
+apscheduler==3.6.3
+astor==0.8.1
+beautifulsoup4==4.12.2
+blinker==1.6.2 ; python_version >= '3.7'
+cachetools==4.2.2 ; python_version ~= '3.5'
+certifi==2023.5.7 ; python_version >= '3.6'
+charset-normalizer==3.1.0 ; python_full_version >= '3.7.0'
+click==8.1.3 ; python_version >= '3.7'
+dill==0.3.6
+dnspython==2.3.0
+flask==2.3.2
+idna==3.4 ; python_version >= '3.5'
+itsdangerous==2.1.2 ; python_version >= '3.7'
+jinja2==3.1.2 ; python_version >= '3.7'
+joblib==1.2.0 ; python_version >= '3.7'
+lxml==4.9.2
+markupsafe==2.1.2 ; python_version >= '3.7'
+nltk==3.8.1
+pillow==9.5.0
+pycurl==7.45.2
+pymongo==4.3.3
+python-magic==0.4.27
+python-telegram-bot==13.15
+pytimeparse==1.1.8
+pytz==2023.3
+regex==2023.5.5 ; python_version >= '3.6'
+requests==2.31.0
+setuptools==67.8.0 ; python_version >= '3.7'
+six==1.16.0 ; python_version >= '2.7' and python_version not in '3.0, 3.1, 3.2'
+soupsieve==2.4.1 ; python_version >= '3.7'
+tornado==6.1 ; python_version >= '3.5'
+tqdm==4.65.0 ; python_version >= '3.7'
+tzlocal==5.0.1 ; python_version >= '3.7'
+urllib3==2.0.2 ; python_version >= '3.7'
+werkzeug==2.3.4 ; python_version >= '3.8'
+xxhash==3.2.0
