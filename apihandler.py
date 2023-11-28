@@ -39,6 +39,12 @@ def subv(xbody, iotype, name):
 def to_json(x):
     return json.dumps(x)
 
+def suppress_exceptions(f):
+    try:
+        return f()
+    except:
+        return None
+
 class InternalPhoto:
     def __init__(self, url, thumb_url=None, caption=None):
         self.url = url
@@ -99,6 +105,12 @@ class TypeCastTransformationVisitor(ast.NodeTransformer):
             elif node.right.id.lower() == 'image':
                 self.uses['query'] = True
                 return ast.copy_location(ast.Call(func=ast.Name('global_construct_image'), args=[node.left], keywords=[]), node)
+            elif node.right.id.lower() == 'catch':
+                return ast.copy_location(ast.Call(func=ast.Name('global_suppress_exceptions'), args=[
+                    ast.copy_location(ast.Lambda(
+                        args=ast.arguments(args=[], posonlyargs=[], varargs=None, kwonlyargs=None, kw_defaults=None, kwarg=None, defaults=[]),
+                        body=node.left), node)
+                ], keywords=[]), node)
         else:
             # not a name, visit it
             self.generic_visit(node)
@@ -287,6 +299,8 @@ class APIHandler(object):
             env = {}
         if 'Image' not in env:
             env['Image'] = Image
+        if 'global_suppress_exceptions' not in env:
+            env.update({'global_suppress_exceptions': suppress_exceptions})
         if len(uses) > 0:
             uses = uses[0]
             if uses:
