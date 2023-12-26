@@ -150,6 +150,7 @@ class APIHandler(object):
             'html/xpath',
             'http/link',
             'http/json',
+            'lit.http/json',
             'identity',
         )
         self.metavarre = re.compile(r'(?!\\)\$([\w:]+)')
@@ -337,7 +338,13 @@ class APIHandler(object):
 
         if comm_type == 'http/json':
             path = self.metavarre.sub(urllib.parse.quote_plus(q), path)
-            return DotDict({'x': requests.get(path).json()}).x
+            res = requests.get(path)
+            return DotDict({'x': res.json()}).x
+
+        if comm_type == 'lit.http/json':
+            path = self.metavarre.sub(q, path)
+            res = requests.get(path)
+            return DotDict({'x': res.json()}).x
 
         if comm_type == 'html/xpath':
             path = self.metavarre.sub(urllib.parse.quote_plus(q), path)
