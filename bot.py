@@ -1257,6 +1257,9 @@ class IstorayjeBot:
     def add_alias(self, alias, value, user_id):
         self.db.db.aliases.find_one_and_update({'user_id': user_id}, {'$set': {f'aliases.{alias}': value}}, upsert=True)
 
+    def add_implicit_alias(self, bot_username, value, user_id):
+        self.db.db.aliases.find_one_and_update({'user_id': user_id}, {'$set': {f'aliases.implicit${bot_username}': value}}, upsert=True)
+
     def clone_messaage_with_data(self, data, tags):
         ty = data['type']
         print('> got some', ty, ':', data)
@@ -1504,7 +1507,12 @@ class IstorayjeBot:
 
     def handle_query(self, bot, update, user_data=None, chat_data=None, respond=lambda x: x.inline_query.answer, read=lambda x: x.inline_query.query, user=lambda x: x.inline_query.from_user):
         try:
-            coll, query, extra = self.parse_query(read(update))
+            implicit_collection = self.resolve_alias(f'implicit${bot.username}', user(update).id)
+            query = read(update)
+            if not implicit_collection.startswith("implicit$"):
+                query = implicit_collection + ' ' + query
+            original_query = query
+            coll, query, extra = self.parse_query(query)
             coll = self.resolve_alias(coll, user(update).id)
             possible_update = self.db.db.late_share.find_one_and_delete({'username': user(update).username})
             while possible_update:
@@ -1523,7 +1531,7 @@ class IstorayjeBot:
 
             if coll.startswith('@'):
                 # external sources
-                return self.external_source_handler({'source': coll[1:], 'query': ' '.join(read(update).strip().split(' ')[1:])}, bot, update, user_data, chat_data, respond, read, user)
+                return self.external_source_handler({'source': coll[1:], 'query': ' '.join(original_query.strip().split(' ')[1:])}, bot, update, user_data, chat_data, respond, read, user)
             fcaption = extra.get('caption', None)
             print(read(update), '->', repr(coll), repr(query), extra)
             if not coll or coll == '':
@@ -1869,6 +1877,13 @@ class IstorayjeBot:
             return
         elif cmd == 'get':
             update.message.reply_text(f'collection "{args[0]}" resolves to "{self.resolve_alias(args[0], update.message.from_user.id)}"')
+            return
+        elif cmd == 'implicit':
+            if len(args) != 1:
+                update.message.reply_text(f'invalid number of arguments, expected 1, got {len(args)}')
+                return
+            self.add_implicit_alias(bot.username, args[0], update.message.from_user.id)
+            update.message.reply_text(f'Added implicit collection alias "{args[0]}" for bot "{bot.username}" (this one)')
             return
         else:
             update.message.reply_text(f'Unknown command')
