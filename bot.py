@@ -145,10 +145,56 @@ class IstorayjeBot:
     def start_webhook(self):
         PORT = int(os.environ.get("PORT", "8443"))
         APP_URL = os.environ.get("APP_URL")
+        
+        # If there's only one updater, use the simple approach
+        if len(self.updaters) == 1:
+            self.updaters[0].start_webhook(
+                listen="0.0.0.0", port=PORT, url_path=self.tokens[0],
+                webhook_url="{}/{}".format(APP_URL, self.tokens[0]))
+            self.primary_updater.idle()
+            return
+            
+        # For multiple updaters, we need a router
+        from flask import Flask, request, jsonify
+        import threading
+        import logging
+        
+        app = Flask(__name__)
+        
         for i, updater in enumerate(self.updaters):
+            updater_port = PORT + i + 1
             updater.start_webhook(
-                listen="0.0.0.0", port=PORT, url_path=self.tokens[i],
-                webhook_url="{}/{}".format(APP_URL, self.tokens[i]))
+                listen="127.0.0.1",
+                port=updater_port,
+                url_path="",
+                webhook_url=f"{APP_URL}/{self.tokens[i]}",
+            )
+            print(f"Started updater {i} on port {updater_port}")
+        
+        @app.route('/<path:token>', methods=['POST'])
+        def webhook(token):
+            for i, t in enumerate(self.tokens):
+                if token == t:
+                    updater_port = PORT + i + 1
+                    from requests import post
+                    response = post(
+                        f'http://127.0.0.1:{updater_port}/',
+                        data=request.data,
+                        headers=request.headers
+                    )
+                    return response.content, response.status_code, response.headers.items()
+            
+            return jsonify({"error": "Invalid token"}), 404
+        
+        threading.Thread(target=lambda: app.run(
+            host='0.0.0.0',
+            port=PORT,
+            debug=False,
+            use_reloader=False
+        ), daemon=True).start()
+        
+        print(f"Router started on port {PORT}")
+        
         self.primary_updater.idle()
 
     def create_handlers(self):
@@ -1949,6 +1995,10 @@ class IstorayjeBot:
             'You may want to alias a collection (external collections supported) to a different name, to do that, send\n' +
             '    /alias set <alias> <value>\n' +
             '  for example: /alias set ac @anilist:char\n' +
+            'Alternatively, to set an implicit alias for the bot (where the collection is always assumed), use\n' +
+            '    /alias implicit <alias>\n' +
+            '  which makes it so that "@botname <query>" is treated as "@botname <alias> <query>"\n' +
+            '  for example: /alias implicit @dict\n' +
             'The caption can be omitted, or set as any of the following to get the "default" caption:\n' +
             '    `$def` or `$default` or `$`' +
             'for example:\n' +
