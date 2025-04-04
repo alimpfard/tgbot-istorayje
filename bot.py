@@ -145,10 +145,10 @@ class IstorayjeBot:
     def start_webhook(self):
         PORT = int(os.environ.get("PORT", "8443"))
         APP_URL = os.environ.get("APP_URL")
-        for updater in self.updaters:
+        for i, updater in enumerate(self.updaters):
             updater.start_webhook(
-                listen="0.0.0.0", port=PORT, url_path=self.token,
-                webhook_url="{}/{}".format(APP_URL, self.token))
+                listen="0.0.0.0", port=PORT, url_path=self.tokens[i],
+                webhook_url="{}/{}".format(APP_URL, self.tokens[i]))
         self.primary_updater.idle()
 
     def create_handlers(self):
