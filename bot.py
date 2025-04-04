@@ -54,25 +54,28 @@ def get_any(obj, lst):
 
 
 class IstorayjeBot:
-    def __init__(self, token, db: DB, dev=False):
+    def __init__(self, tokens: list[str], db: DB, dev=False):
         self.stemmer = PorterStemmer()
         self.stopwordset = stopwords.words('english')
         self.random = random.Random()
-        self.token = token
-        self.updater = Updater(token, use_context=False)
+        self.tokens = tokens
+        self.updaters = [Updater(token, use_context=False) for token in tokens]
         # Clear APScheduler jobs, they're weird
-        self.updater.job_queue.scheduler.remove_all_jobs()
+        for updater in self.updaters:
+            updater.job_queue.scheduler.remove_all_jobs()
 
         self.db = db
         self.external_api_handler = APIHandler(self)
         for handler in self.create_handlers():
             self.register_handler(handler)
-        self.updater.dispatcher.add_error_handler(self.error)
 
-        self.restore_jobs(self.updater.bot)
+        for updater in self.updaters:
+            updater.dispatcher.add_error_handler(self.error)
+            self.restore_jobs(updater)
+            updater.job_queue.run_repeating( # it will re-add itself based on load if more is required
+                self.process_insertions, (timedelta(minutes=1) if not dev else timedelta(seconds=10)))
 
-        self.updater.job_queue.run_repeating( # it will re-add itself based on load if more is required
-            self.process_insertions, (timedelta(minutes=1) if not dev else timedelta(seconds=10)))
+        self.primary_updater = self.updaters[0]
 
         self.context = {}
 
@@ -88,7 +91,7 @@ class IstorayjeBot:
                 self.db.db.jobs.update_one({'_id': job_id}, {'$set': {'next_run': time() + period}})
         return f
 
-    def enqueue_repeating_task(self, fn, period, *args, **kwargs):
+    def enqueue_repeating_task(self, bot, fn, period, *args, **kwargs):
         doc = self.db.db.jobs.insert_one({
             'fn': fn,
             'args': pickle.dumps(args),
@@ -97,12 +100,12 @@ class IstorayjeBot:
             'start_time': time(),
             'next_run': time() + int(period),
         })
-        self.updater.job_queue.run_once(
-            self._transform_to_self_repeating_job(fn, doc.inserted_id, period, args, kwargs, self.updater.bot), period, name=str(doc.inserted_id))
+        self.primary_updater.job_queue.run_once(
+            self._transform_to_self_repeating_job(fn, doc.inserted_id, period, args, kwargs, bot), period, name=str(doc.inserted_id))
         return doc.inserted_id
 
-    def restore_jobs(self, bot):
-        jq = self.updater.job_queue
+    def restore_jobs(self, updater):
+        jq = updater.job_queue
         now = time()
         jobs = self.db.db.jobs.find({})
         for job in jobs:
@@ -117,13 +120,13 @@ class IstorayjeBot:
                 print("", "Which was overdue, and now is", next_from_now, "later")
             next_from_now = int(next_from_now)
             # Transform into a run_once job that will be re-added and will update the db entry
-            jq.run_once(self._transform_to_self_repeating_job(fn, job_id, job['period'], args, kwargs, bot), next_run_from_now, name = str(job_id))
+            jq.run_once(self._transform_to_self_repeating_job(fn, job_id, job['period'], args, kwargs, updater.bot), next_run_from_now, name = str(job_id))
 
     def cancel_repeating_task(self, task_id):
         print('canceling job', task_id)
         res = self.db.db.jobs.delete_one({'_id': ObjectId(task_id)})
         print('', 'deleted', res.deleted_count)
-        for job in self.updater.job_queue.get_jobs_by_name(task_id):
+        for job in self.primary_updater.job_queue.get_jobs_by_name(task_id):
             job.schedule_removal()
             print('', "removed job", job)
 
@@ -131,19 +134,22 @@ class IstorayjeBot:
         print(f'[Error] Update {update} caused error {error}')
 
     def register_handler(self, handler):
-        self.updater.dispatcher.add_handler(handler)
+        for updater in self.updaters:
+            updater.dispatcher.add_handler(handler)
 
     def start_polling(self):
-        self.updater.start_polling()
-        self.updater.idle()
+        for updater in self.updaters:
+            updater.start_polling()
+        self.primary_updater.idle()
 
     def start_webhook(self):
         PORT = int(os.environ.get("PORT", "8443"))
         APP_URL = os.environ.get("APP_URL")
-        self.updater.start_webhook(
-            listen="0.0.0.0", port=PORT, url_path=self.token,
-            webhook_url="{}/{}".format(APP_URL, self.token))
-        self.updater.idle()
+        for updater in self.updaters:
+            updater.start_webhook(
+                listen="0.0.0.0", port=PORT, url_path=self.token,
+                webhook_url="{}/{}".format(APP_URL, self.token))
+        self.primary_updater.idle()
 
     def create_handlers(self):
         return [
@@ -222,7 +228,7 @@ class IstorayjeBot:
                      for x in tags if x), [])
         ))
 
-    def process_insertions(self, *args, timeout=150, **kwargs):
+    def process_insertions(self, bot, *args, timeout=150, **kwargs):
         stime = time()
         while True:
             if time() - stime >= timeout:
@@ -235,10 +241,10 @@ class IstorayjeBot:
 
             if doc['service'] == 'google':
                 print('google', doc)
-                details = searchGoogleImages(self.updater.bot.get_file(doc['fileid'])._get_encoded_url())
+                details = searchGoogleImages(bot.get_file(doc['fileid'])._get_encoded_url())
                 if not details:
                     resp = doc['response_id']
-                    self.updater.bot.edit_message_text(
+                    bot.edit_message_text(
                         'Failed: google query had no results',
                         chat_id=resp[1],
                         message_id=resp[0],
@@ -248,7 +254,7 @@ class IstorayjeBot:
                 res = pke_tagify(req)
                 if not res:
                     resp = doc['response_id']
-                    self.updater.bot.edit_message_text(
+                    bot.edit_message_text(
                         'Failed: google query had no usable tags',
                         chat_id=resp[1],
                         message_id=resp[0],
@@ -260,11 +266,11 @@ class IstorayjeBot:
             elif doc['service'] == 'sauce':
                 sub = doc['sub_service']
                 print(sub, doc)
-                details = (searchIqdb if sub == 'iqdb' else searchSauceNao)(self.updater.bot.get_file(doc['fileid'])._get_encoded_url())
+                details = (searchIqdb if sub == 'iqdb' else searchSauceNao)(bot.get_file(doc['fileid'])._get_encoded_url())
                 print(details)
                 if not details:
                     resp = doc['response_id']
-                    self.updater.bot.edit_message_text(
+                    bot.edit_message_text(
                         'Failed: sauce query had no results',
                         chat_id=resp[1],
                         message_id=resp[0],
@@ -274,7 +280,7 @@ class IstorayjeBot:
                 res = pke_tagify(req)
                 if not res:
                     resp = doc['response_id']
-                    self.updater.bot.edit_message_text(
+                    bot.edit_message_text(
                         'Failed: sauce query had no usable tags',
                         chat_id=resp[1],
                         message_id=resp[0],
@@ -287,7 +293,7 @@ class IstorayjeBot:
                 details = deepdan(doc['filecontent'], doc['mime'])
                 if not details:
                     resp = doc['response_id']
-                    self.updater.bot.edit_message_text(
+                    bot.edit_message_text(
                         'Rejected: deepdan query had no results',
                         chat_id=resp[1],
                         message_id=resp[0],
@@ -300,7 +306,7 @@ class IstorayjeBot:
                 print(doclist, details)
                 if not doclist:
                     resp = doc['response_id']
-                    self.updater.bot.edit_message_text(
+                    bot.edit_message_text(
                         f'Completed: deepdan query results below set similarity ({doc["similarity_cap"]})',
                         chat_id=resp[1],
                         message_id=resp[0],
@@ -314,7 +320,7 @@ class IstorayjeBot:
                 details = getTraceAPIDetails(doc['filecontent'])
                 if not details:
                     resp = doc['response_id']
-                    self.updater.bot.edit_message_text(
+                    bot.edit_message_text(
                         'Rejected: anime query had no results',
                         chat_id=resp[1],
                         message_id=resp[0],
@@ -325,7 +331,7 @@ class IstorayjeBot:
                 docv = details['docs']
                 if len(docv) < 1:
                     resp = doc['response_id']
-                    self.updater.bot.edit_message_text(
+                    bot.edit_message_text(
                         'Failed: anime query had no results',
                         chat_id=resp[1],
                         message_id=resp[0],
@@ -339,7 +345,7 @@ class IstorayjeBot:
                     docv = next(iter(doclist))
                 except StopIteration:
                     resp = doc['response_id']
-                    self.updater.bot.edit_message_text(
+                    bot.edit_message_text(
                         f'Completed: anime query results below set similarity ({doc["similarity_cap"]})',
                         chat_id=resp[1],
                         message_id=resp[0],
@@ -352,7 +358,7 @@ class IstorayjeBot:
 
                 if not docv:
                     resp = doc['response_id']
-                    self.updater.bot.edit_message_text(
+                    bot.edit_message_text(
                         'Failed: unknown reason',
                         chat_id=resp[1],
                         message_id=resp[0],
@@ -377,13 +383,13 @@ class IstorayjeBot:
 
             elif doc['service'] == 'gifop':
                 res = process_gifops(
-                    url=self.updater.bot.get_file(doc['fileid'])._get_encoded_url(),
+                    url=bot.get_file(doc['fileid'])._get_encoded_url(),
                     ops={x:doc[x] for x in ['reverse', 'speed', 'skip', 'early', 'append', 'animate'] if x in doc},
                     format=doc['format']
                 )
                 resp = doc['response_id']
                 if res == b'':
-                    self.updater.bot.edit_message_text(
+                    bot.edit_message_text(
                         f'Failed: operation failed',
                         chat_id=resp[1],
                         message_id=resp[0],
@@ -393,12 +399,12 @@ class IstorayjeBot:
                 try:
                     xrep = BytesIO(res)
                     xrep.name = 'gifopd.mp4'
-                    msgid = self.updater.bot.send_animation(
+                    msgid = bot.send_animation(
                         doc['response_id'][1],
                         xrep
                     ).message_id
                 except Exception as e:
-                    self.updater.bot.edit_message_text(
+                    bot.edit_message_text(
                         f'Failed: operation failed: {e}',
                         chat_id=resp[1],
                         message_id=resp[0],
@@ -415,7 +421,7 @@ class IstorayjeBot:
                 if doc.get('replace', False):
                     ins = {'$set': {f'collection.{p[0]}.index.{p[1]}.id': msgid for p in insps}}
                     self.db.db.storage.update_many({'user_id': {'$in': doc['users']}}, ins)
-                    self.updater.bot.edit_message_text(
+                    bot.edit_message_text(
                         f'Completed: applied conversion and modified index',
                         chat_id=resp[1],
                         message_id=resp[0],
@@ -428,14 +434,14 @@ class IstorayjeBot:
                         ]
                     })
                     if not insps:
-                        self.updater.bot.edit_message_text(
+                        bot.edit_message_text(
                             f'Completed.\nWarning: nowhere to insert, new gif is unregistered',
                             chat_id=resp[1],
                             message_id=resp[0],
                         )
                         continue
                     if not document:
-                        self.updater.bot.edit_message_text(
+                        bot.edit_message_text(
                             f'Failed: not a single user whom has indexed the original message found',
                             chat_id=resp[1],
                             message_id=resp[0],
@@ -448,7 +454,7 @@ class IstorayjeBot:
                         }
                     }
                     self.db.db.storage.update_many({'user_id': {'$in': doc['users']}}, ins)
-                    self.updater.bot.edit_message_text(
+                    bot.edit_message_text(
                         f'Completed: applied conversion and added to index',
                         chat_id=resp[1],
                         message_id=resp[0],
@@ -473,21 +479,21 @@ class IstorayjeBot:
                     self.db.db.storage.update_many(
                         {'user_id': {'$in': doc['users']}}, ins)
                 resp = doc['response_id']
-                self.updater.bot.edit_message_text(
+                bot.edit_message_text(
                         f'Completed:\nadded tags: {" ".join(instags)}\nExtra data:\t{"    ".join(extra if extra else ["None"])}',
                     chat_id=resp[1],
                     message_id=resp[0],
                 )
             else:
                 resp = doc['response_id']
-                self.updater.bot.edit_message_text(
+                bot.edit_message_text(
                     'Completed: query had no results',
                     chat_id=resp[1],
                     message_id=resp[0],
                 )
 
         if self.db.db.tag_updates.count_documents({}) != 0:
-            self.updater.job_queue.run_once(self.process_insertions, timedelta(seconds=5)) # todo: based on load
+            self.primary_updater.job_queue.run_once(lambda *args, **kwargs: self.process_insertions(bot, *args, **kwargs), timedelta(seconds=5)) # todo: based on load
     def sample(self, iterator, k):
         result = [next(iterator) for _ in range(k)]
 
@@ -545,7 +551,7 @@ class IstorayjeBot:
 
                 if any(x in mime for x in ['gif', 'mp4']):
                     if google:
-                        content = get_some_frame(self.updater.bot.get_file(file_id=doc.file_id)._get_encoded_url(), format='mp4' if 'mp4' in mime else 'gif')
+                        content = get_some_frame(bot.get_file(file_id=doc.file_id)._get_encoded_url(), format='mp4' if 'mp4' in mime else 'gif')
                         # print(content)
                         # p = png.Reader(bytes=content).read()
                         # m = hashlib.md5()
@@ -563,14 +569,14 @@ class IstorayjeBot:
                                             chat=tmp['temp']['id']
                                         )
                     else:
-                        insert['filecontent'] = bytes(self.updater.bot.get_file(
+                        insert['filecontent'] = bytes(bot.get_file(
                             file_id=doc.thumb.file_id).download_as_bytearray())
 
                 elif 'image' in mime:
                     if google:
                         insert['fileid'] = doc.file_id
                     else:
-                        insert['filecontent'] = bytes(self.updater.bot.get_file(
+                        insert['filecontent'] = bytes(bot.get_file(
                             file_id=doc.file_id).download_as_bytearray())
 
                 else:
@@ -831,7 +837,7 @@ class IstorayjeBot:
                         update.message.reply_text(
                             'Please wait, this might take a moment'
                         )
-                        mvalue = xxhash.xxh64(self.updater.bot.get_file(
+                        mvalue = xxhash.xxh64(bot.get_file(
                             file_id=mvalue).download_as_bytearray()).digest()
                         mfield = 'xxhash'
                     print(f'going to look at {mfield} for {mvalue}')
@@ -976,7 +982,7 @@ class IstorayjeBot:
                     msg.reply_text(f"Invalid time spec '{extern_schedule}'")
                 else:
                     try:
-                        job_id = self.enqueue_repeating_task('process_extern_request', tp, extern_query, msg.to_dict())
+                        job_id = self.enqueue_repeating_task(bot, 'process_extern_request', tp, extern_query, msg.to_dict())
                         msg.reply_text(f"Will repeat {extern_query} every {tp} seconds!\nuse {job_id} to refer to this job")
                     except Exception as e:
                         traceback.print_exc()
@@ -1196,6 +1202,15 @@ class IstorayjeBot:
         extra = {
             'caption': None
         }
+        if gquery.startswith("+"):
+            # +n (pagination)
+            gquery = gquery[1:]
+            num = re.search(r'^(\d+)\s*(.*)', gquery)
+            if num:
+                extra['page'] = int(num.group(1))
+                gquery = num.group(2)
+            else:
+                gquery = '+' + gquery
         while len(gquery):
             c, gquery = gquery[0], gquery[1:]
             if c == ' ' and not parsed_coll and open_brak == 0:
@@ -1336,7 +1351,7 @@ class IstorayjeBot:
                     'file_id': document.file_id,
                     'chatid': chid,
                     'msg_id': id,
-                    'xxhash': xxhash.xxh64(self.updater.bot.get_file(file_id=document.file_id).download_as_bytearray()).digest(),
+                    'xxhash': xxhash.xxh64(bot.get_file(file_id=document.file_id).download_as_bytearray()).digest(),
                     'caption': caption
                 }
                 if 'mp4' in mime:
@@ -1374,7 +1389,7 @@ class IstorayjeBot:
                             'file_id': voice.file_id,
                             'chatid': chid,
                             'msg_id': id,
-                            'xxhash': xxhash.xxh64(self.updater.bot.get_file(file_id=voice.file_id).download_as_bytearray()).digest(),
+                            'xxhash': xxhash.xxh64(bot.get_file(file_id=voice.file_id).download_as_bytearray()).digest(),
                         }
                         self.db.db.message_cache.find_one_and_replace({'$and': [{'msg_id': id}, {'chatid': chid}]}, {k:v for k,v in data.items() if k != 'caption'}, upsert=True)
                         return self.clone_messaage_with_data(data, tags)
@@ -1653,8 +1668,14 @@ class IstorayjeBot:
                                 f'This bot is actually dumb\nException: {e}')
                         )
                     )
+            page = extra.get('page', 0)
+            start_index = min(page * 20, len(results))
+            end_index = min(start_index + 20, len(results))
+            if start_index == end_index:
+                start_index = 0
+                end_index = 20
             respond(update)(
-                results,
+                results[start_index:end_index],
                 cache_time=cachetime,
                 is_personal=True
             )
@@ -2157,7 +2178,7 @@ All output adapters must evaluate to an array of 2-tuples of the form (result na
         mod = 0
         for item in index:
             try:
-                h = xxhash.xxh64(self.updater.bot.get_file(
+                h = xxhash.xxh64(bot.get_file(
                     file_id=item[1]).download_as_bytearray()).digest()
                 mod += self.db.db.message_cache.update_one(
                     {'_id': item[0]}, {'$set': {'xxhash': h}}).modified_count

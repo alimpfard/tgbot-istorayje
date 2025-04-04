@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 mode = os.environ.get('MODE', 'dev')
 
-bot = IstorayjeBot(os.environ['TOKEN'], DB(url=os.environ['MONGO_URL']), dev=mode == 'dev')
+bot = IstorayjeBot(tokens=os.environ['TOKEN'].split(";"), db=DB(url=os.environ['MONGO_URL']), dev=mode == 'dev')
 
 print('Starting to do shit')
 
