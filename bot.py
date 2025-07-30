@@ -1570,6 +1570,9 @@ class IstorayjeBot:
     async def process_extern_request(
         self, req, json_msg: dict, context: ContextTypes.DEFAULT_TYPE
     ):
+        if isinstance(json_msg, str):
+            # migration from old code
+            json_msg = json.loads(json_msg)
         msg = telegram.Message.de_json(json_msg, context.bot)
 
         # @each (req) (lines:it)
