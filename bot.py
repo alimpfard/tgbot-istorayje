@@ -1625,7 +1625,7 @@ class IstorayjeBot:
 
             await asyncio.gather(*queues)
 
-        return process()
+        return await process()
 
     async def handle_list_index(
         self, update: telegram.Update, context: ContextTypes.DEFAULT_TYPE
