@@ -62,6 +62,8 @@ from apihandler import APIHandler
 from typing import Awaitable, Callable, Optional, Coroutine
 from type import T
 
+from help_texts import HELP_TEXTS, MAGIC_HELP_TEXTS
+
 
 def get_any(obj, lst):
     for prop in lst:
@@ -2600,241 +2602,20 @@ class IstorayjeBot:
         del self.context[update.message.from_user.id]
 
     async def help(self, update: telegram.Update, context: ContextTypes.DEFAULT_TYPE):
-        msg = await update.message.reply_text(
-            "*Message Tagger/Indexer*\n"
-            + "To start working with this, follow the following steps:\n"
-            + "    0. Create two channels (with usernames), hereon designated _temp_ and _storage_\n"
-            + "    1. Add the bot to both of them\n"
-            + "    2. (in this chat) /connect <name-of-collection>\n"
-            + "    3. (in this chat) /set _@storage_\n"
-            + "    4. (in this chat) /temp _@temp_\n"
-            + 'To tag and add a message (or a list of messages) to a collection, send the message(s) to _storage_, followed by "set: _tags_"\n'
-            + "\nHere's an example of such interaction:",
-            parse_mode=ParseMode.MARKDOWN,
-        )
-
-        await msg.reply_text("This is a test message")
-        await msg.reply_text("set: test msg message useless example")
-
-        await update.message.reply_text(
-            "To search any given collection, use the bot's inline interface as such:\n"
-            + "    @istorayjebot _collection_ _query_ _{caption}_\n"
-            + "You may want to alias a collection (external collections supported) to a different name, to do that, send\n"
-            + "    /alias set <alias> <value>\n"
-            + "  for example: /alias set ac @anilist:char\n"
-            + "Alternatively, to set an implicit alias for the bot (where the collection is always assumed), use\n"
-            + "    /alias implicit <alias>\n"
-            + '  which makes it so that "@botname <query>" is treated as "@botname <alias> <query>"\n'
-            + "  for example: /alias implicit @dict\n"
-            + 'The caption can be omitted, or set as any of the following to get the "default" caption:\n'
-            + "    `$def` or `$default` or `$`"
-            + "for example:\n"
-            + "    @istorayjebot gif misaka nah {$}\n"
-            + 'To match "misaka" and "nah" from the collection "gif" and give it the default (if set) caption\n'
-            + "or another example:\n"
-            + "    @istorayjebot gif lol\n"
-            + 'To match "lol" in collection "gif" and send no caption\n'
-            + "or yet another example:\n"
-            + "    @istorayjebot gif fish {Help, I am drowning!}\n"
-            + 'to match "fish" in collection "gif" and give it the caption "Help, I am drowning!"\n\n'
-            + "External pseudo-collections (collections starting with '@')\n"
-            + "    `@anilist`: query anilist for anime stuff\n"
-            + "        takes an optional modifier in the form `@anilist:modifier` where modifier is:\n"
-            + "        `ql`     - custom graphql search\n"
-            + "        `bychar` - search anime by character name\n"
-            + "        `char`   - search for character\n"
-            + "        `aggql`  - aggregate operations on result of gql\n",
-            parse_mode=ParseMode.MARKDOWN,
-        )
-        await update.message.reply_text(
-            "Further modifications to entries are done through the provided operators, by replying to a tagged message\n"
-            + "    `^set:` - set the tags, overwrites the previous values\n"
-            + "    `^add:` - adds a tag to the previous set\n"
-            + "    `^remove:` - removes a tag from the previous set\n"
-            + "    `^delete` - deletes the entry from the index\n"
-            + "\n"
-            + "for example:",
-            parse_mode=ParseMode.MARKDOWN,
-        )
-        await msg.reply_text("^add: newtag another-new-tag")
-        await update.message.reply_text(
-            'in the later stage (when you would modify tags with ^<cmd>), you can use some "magic" tags that do different things\n'
-            + "Here is a short description of some:\n"
-            + "    $google(_minimum accepted accuracy_)\n"
-            + "        reverse searches google and finds some matching tags\n"
-            + "    $anime(_minimum accepted accuracy_)\n"
-            + "        tries to find the name of the anime (cropped images/gifs will not work)\n"
-            + "    $caption(_default caption_)\n"
-            + '        sets a "default" caption for the message (not texts)\n'
-            + "The default _minimum accepted accuracy_ is 60%, and *commas have to be escaped in captions*\n",
-            parse_mode=ParseMode.MARKDOWN,
-        )
+        for sequence in HELP_TEXTS:
+            prior = None
+            for text in sequence["list"]:
+                if prior is None:
+                    prior = await update.message.reply_text(
+                        text, parse_mode=sequence["mode"]
+                    )
+                else:
+                    prior = await prior.reply_text(text, parse_mode=sequence["mode"])
 
     async def help_magics(
         self, update: telegram.Update, context: ContextTypes.DEFAULT_TYPE
     ):
-        index = [
-            "Magic Tags Index\n"
-            "\n"
-            "TODO: Add online documentation for this stuff\n"
-            "This is a listing of all supported magic tags and their properties:\n",
-            "`$google` - search google for relevant tags\n"
-            "  stage 2\n"
-            "  arguments:\n"
-            "      - positional _minimum accepted accuracy_ <int>: tags with confidence less than this will be ignored\n"
-            "      - optional literal _cloud_ <literal>: supposed to search with google Vision ML. currently ignored.\n"
-            "  short forms:\n"
-            "      None\n"
-            "  document types:\n"
-            "      media documents <image, video, GIF>\n"
-            "  further notes:\n"
-            "      None\n",
-            "`$anime` - search for anime title\n"
-            "  stage 2\n"
-            "  arguments:\n"
-            "       - position _minimum accepted accuracy_ <int>: results with confidence less than this will be ignored\n"
-            "  short forms:\n"
-            "      None\n"
-            "  document types:\n"
-            "      media documents <image, video, GIF>\n"
-            "  further notes:\n"
-            "      Cropped images of anime will likely yield incorrect results\n",
-            "`$sauce` - search for image source (SauceNao)\n"
-            "  stage 2\n"
-            "  arguments:\n"
-            "       - position _minimum accepted accuracy_ <int>: results with confidence less than this will be ignored\n"
-            "  short forms:\n"
-            "      None\n"
-            "  document types:\n"
-            "      media documents <image, video, GIF>\n"
-            "  further notes:\n"
-            "      May return multiple equal sources, and sources may have no links\n",
-            "`$dan` - use a neural net to guess image contents (uses danbooru tags)\n"
-            "  stage 2\n"
-            "  arguments:\n"
-            "       - position _minimum accepted accuracy_ <int>: results with confidence less than this will be ignored\n"
-            "  short forms:\n"
-            "      None\n"
-            "  document types:\n"
-            "      media documents <image, video, GIF>\n"
-            "  further notes:\n"
-            "      Geared towards animated/drawn images, but has shown to perform reasonably well on real images too\n",
-            "`$synonyms` - find and add synonyms or related words\n"
-            "  stage 1\n"
-            "  arguments:\n"
-            "      - mixed literal _word_ <literal> (multiple allowed): words to process\n"
-            '      - optional opt mixed literal _:hypernym-depth {depth}_ <literal> (takes an int modifier "depth"): include words related by categories up to _depth_ categories\n'
-            '      - optional opt mixed literal _:count {count}_ <literal> (takes an int modifier "count"): include this many results (default 10)\n'
-            "      - optional opt literal _:hyponyms_ <literal>: includes words related in the same category\n"
-            "  short forms:\n"
-            "      `$syn`\n"
-            "  document types:\n"
-            "      all document types\n"
-            "  further notes:\n"
-            "      None\n",
-            "`$caption` - add a default caption invokable by {$} in inline queries\n"
-            "  stage 2\n"
-            "  arguments:\n"
-            '      - positional literal _caption_ <literal>: the would-be default caption (escape commas with a backslash "\\")\n'
-            "  short forms:\n"
-            "      `$cap`, `$defcap`\n"
-            "  document types:\n"
-            "      media documents <image, video, GIF>\n"
-            "  further notes:\n"
-            "      None\n",
-            "`$gifop` - operations on indexed GIFs\n"
-            "  stage 2\n"
-            "  arguments:\n"
-            "      - optional literal _reverse_ <literal>: reverses the GIF\n"
-            "      - optional literal _append_ <literal>: (applies if _reverse_ is provided) appends the reverse to the end of original if provided\n"
-            "      - optional literal _replace_ <literal>: replaces the original in the index if provided\n"
-            "      - optional mixed literal _speed {speed}_ (takes a float modifier _speed_) <literal>: modifies the speed of the GIF\n"
-            "      - optional mixed literal _skip {value} <ti|fr|%>_ (takes an int modifier _value_) <literal>: skips the provided {value} units from the start\n"
-            "      - optional mixed literal _early {value} <ti|fr|%>_ (takes an int modifier _value_) <literal>: cuts off the provided {value} units from the end\n"
-            "      - optional mixed literal _animate frame:[number]/[unit] length:[number]/[unit] effect:[name] dx:[number] dy:[number] (multiplex) (word:word)_\n"
-            "           note: to escape spaces in e.g. 'text', use `^ ` (that is, caret-space)\n"
-            "           effects:\n"
-            "           + scroll - scroll in direction (dx, dy)\n"
-            "           + zoom - zoom in to (dx, dy)\n"
-            "           + rotate - rotate around (dx, dy)\n"
-            "           + text - place (prop: `text`) at position (dx, dy)\n"
-            "             extras: `[color:<fill color>] [outline:<stroke color>] [background:<background color>] [shadow:<shadow color>]`\n"
-            "             not specifying `shadow` and `background` will disable them\n"
-            "           + overlay-points - overlay key point positions\n"
-            "           + distort - apply various distortions (TODO)\n"
-            "  short forms:\n"
-            "      None\n"
-            "  document types:\n"
-            "      GIFs\n"
-            "  further notes:\n"
-            "      operation order is (first to last):\n"
-            "          skip|early, reverse, speed\n",
-            """/api documentation
-
-the available subcommands are
-
-- list {api/input/output}
-    List the required API handlers
-
-- define {input/output} {name} {varname} ...request in API DSL
-    Defines the named adapter with the provided varname,
-    for input adapters, the variable refers to the query (as a string)
-    for output adapters, the variable refers to the response, parsed if possible
-
-- redefine (same args as define)
-    Overwrites an existing adapter
-
-- declare {name} {comm type} {input adapter} {output adapter} {api path}
-    Declares an API endpoint, accessible via the @{name} external collection
-    comm type will be defined later
-    api path may refer to the result of {input adapter} as result
-
-- redeclare (same args as declare)
-    Overwrites a declared api
-
-API handler documentation
-
-Comm types
-
-the available comm types are:
-- http/link
-    metavar in url: Yes
-    response type: string
-    behaviour: simply substitutes the metavar in the URL
-    expected input adapter output: string
-
-- json/post
-    metavar in url: Yes, through input.pvalue
-    response type: Dictionary
-    behvaiour: substitutes the metavar, sends a post request, returns output
-    expected input adapter output: {pvalue: string, value: T}
-
-- html/xpath
-    metavar in url: Yes
-    response type: Dictionary
-    behvaiour: substitutes the metavar, sends a get request, returns output
-    expected input adapter output: string
-
-- graphql
-    metavar in url: No
-    response type: T
-    behaviour: sends the metavar as a gql query
-    expected input adapter output: T'
-
-
-DSL Documentation
-
-A single python expression with the following extensions
-
-- expr @json - jsonifies expr
-- ${metavar} - replaced with the value of the metavar
-
-
-Output Adapter Documentation
-
-All output adapters must evaluate to an array of 2-tuples of the form (result name, result text), both of which should be strings.""",
-        ]
-        for i in index:
+        for i in MAGIC_HELP_TEXTS:
             await update.message.reply_text(i, parse_mode=ParseMode.MARKDOWN)
 
     async def reverse_search(
