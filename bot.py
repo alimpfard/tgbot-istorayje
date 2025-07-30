@@ -6,6 +6,7 @@ from telegram.ext import (
     MessageHandler,
     filters,
     ApplicationBuilder,
+    Application,
     ContextTypes,
 )
 from telegram import (
@@ -147,7 +148,7 @@ class IstorayjeBot:
 
         return doc.inserted_id
 
-    def restore_jobs(self, app):
+    def restore_jobs(self, app: Application):
         jq = app.job_queue
         now = time()
         jobs = self.db.db.jobs.find({})

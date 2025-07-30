@@ -8,7 +8,7 @@ autopep8 = "*"
 
 [packages]
 APScheduler = "3.11.0"
-python-telegram-bot = "22.3"
+python-telegram-bot = { extras = ["job-queue", "webhooks"], version = "22.3" }
 pymongo = "*"
 dnspython = "*"
 flask = "*"
