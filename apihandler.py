@@ -74,6 +74,11 @@ def suppress_exceptions(f):
     except:
         return None
 
+def get_source_query(x):
+    try:
+        return getattr(x, "__source_query__")
+    except AttributeError:
+        return None
 
 class InternalPhoto:
     def __init__(self, url, thumb_url=None, caption=None):
@@ -149,6 +154,15 @@ class TypeCastTransformationVisitor(ast.NodeTransformer):
                 return ast.copy_location(
                     ast.Call(
                         func=ast.Name("global_construct_image"),
+                        args=[node.left],
+                        keywords=[],
+                    ),
+                    node,
+                )
+            elif node.right.id.lower() == "query":
+                return ast.copy_location(
+                    ast.Call(
+                        func=ast.Name("global_get_source_query"),
                         args=[node.left],
                         keywords=[],
                     ),
@@ -391,6 +405,8 @@ class APIHandler(object):
             env["Image"] = Image
         if "global_suppress_exceptions" not in env:
             env.update({"global_suppress_exceptions": suppress_exceptions})
+        if "global_get_source_query" not in env:
+            env.update({"global_get_source_query": get_source_query})
         if len(uses) > 0:
             uses = uses[0]
             if uses:
@@ -416,41 +432,45 @@ class APIHandler(object):
         inpv = self.input_adapters[inp]
 
         _, q = self.adapter(inp, inpv, query)
-        if comm_type == "identity":
-            return self.metavarre.sub(q, path)
+        def res(path=path):
+            if comm_type == "identity":
+                return self.metavarre.sub(q, path)
 
-        if comm_type == "http/link":
-            path = self.metavarre.sub(urllib.parse.quote_plus(q), path)
-            return path
+            if comm_type == "http/link":
+                path = self.metavarre.sub(urllib.parse.quote_plus(q), path)
+                return path
 
-        if comm_type == "json/post":
-            path = self.metavarre.sub(q.get("pvalue", ""), path)
-            res = requests.post(path, data=q.get("value", {}))
-            return DotDict({"x": res.json()}).x
+            if comm_type == "json/post":
+                path = self.metavarre.sub(q.get("pvalue", ""), path)
+                res = requests.post(path, data=q.get("value", {}))
+                return DotDict({"x": res.json()}).x
 
-        if comm_type == "http/json":
-            path = self.metavarre.sub(urllib.parse.quote_plus(q), path)
-            res = requests.get(path)
-            return DotDict({"x": res.json()}).x
+            if comm_type == "http/json":
+                path = self.metavarre.sub(urllib.parse.quote_plus(q), path)
+                res = requests.get(path)
+                return DotDict({"x": res.json()}).x
 
-        if comm_type == "lit.http/json":
-            path = self.metavarre.sub(q, path)
-            res = requests.get(path)
-            return DotDict({"x": res.json()}).x
+            if comm_type == "lit.http/json":
+                path = self.metavarre.sub(q, path)
+                res = requests.get(path)
+                return DotDict({"x": res.json()}).x
 
-        if comm_type == "html/xpath":
-            path = self.metavarre.sub(urllib.parse.quote_plus(q), path)
-            req = requests.get(path)
-            if req.status_code != 200:
-                raise Exception(f"{req.status_code}: {req.reason}")
-            xml = xhtml.fromstring(req.content)
-            return lambda x, xml=xml: xml.xpath(x)
+            if comm_type == "html/xpath":
+                path = self.metavarre.sub(urllib.parse.quote_plus(q), path)
+                req = requests.get(path)
+                if req.status_code != 200:
+                    raise Exception(f"{req.status_code}: {req.reason}")
+                xml = xhtml.fromstring(req.content)
+                return lambda x, xml=xml: xml.xpath(x)
 
-        if comm_type == "graphql":
-            req = requests.post(path, json={"query": q, "vars": {}}).json()
-            return DotDict({"x": req}).x
+            if comm_type == "graphql":
+                req = requests.post(path, json={"query": q, "vars": {}}).json()
+                return DotDict({"x": req}).x
 
-        raise Exception(f"type {comm_type} not yet implemented")
+            raise Exception(f"type {comm_type} not yet implemented")
+        r = res()
+        setattr(r, "__source_query__", q)
+        return r
 
     def render(self, api, value):
         comm_type, inp, out, path = self.apis[api]
