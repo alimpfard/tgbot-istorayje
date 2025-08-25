@@ -74,11 +74,13 @@ def suppress_exceptions(f):
     except:
         return None
 
+
 def get_source_query(x):
     try:
         return getattr(x, "__source_query__")
     except AttributeError:
         return None
+
 
 class InternalPhoto:
     def __init__(self, url, thumb_url=None, caption=None):
@@ -421,7 +423,7 @@ class APIHandler(object):
             eval(compile(body, name, "eval", dont_inherit=True), env, {})(value),
         )
 
-    def invoke(self, api, query):
+    def invoke(self, api, query, extra):
         comm_type, inp, out, path = self.apis[api]
         if inp not in self.input_adapters:
             raise Exception(f"Undefined input adapter {inp}")
@@ -431,7 +433,8 @@ class APIHandler(object):
 
         inpv = self.input_adapters[inp]
 
-        _, q = self.adapter(inp, inpv, query)
+        _, q = self.adapter(inp, inpv, query, env=extra)
+
         def res(path=path):
             if comm_type == "identity":
                 return self.metavarre.sub(q, path)
@@ -468,13 +471,14 @@ class APIHandler(object):
                 return DotDict({"x": req}).x
 
             raise Exception(f"type {comm_type} not yet implemented")
+
         r = res()
         setattr(r, "__source_query__", q)
         return r
 
-    def render(self, api, value):
+    def render(self, api, value, extra):
         comm_type, inp, out, path = self.apis[api]
 
         outv = self.output_adapters[out]
-        _type, q = self.adapter(out, outv, value)
+        _type, q = self.adapter(out, outv, value, env=extra)
         return self.tgwrap(api, _type, q)

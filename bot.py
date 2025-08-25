@@ -1919,11 +1919,11 @@ class IstorayjeBot:
                     qs.add(tp)
         return qq
 
-    def invoke(self, api, reqs, query):
-        return self.external_api_handler.invoke(api, query)
+    def invoke(self, api, reqs, query, extra):
+        return self.external_api_handler.invoke(api, query, extra)
 
-    def render_api(self, api, reqs, res):
-        return self.external_api_handler.render(api, res)
+    def render_api(self, api, reqs, res, extra):
+        return self.external_api_handler.render(api, res, extra)
 
     def has_api(self, user, api):
         return api in self.external_api_handler.apis
@@ -1950,6 +1950,7 @@ class IstorayjeBot:
             coll, *ireqs = data["source"].split(":")
             ireqs = ":".join(ireqs)
             query = data["query"]
+            extra = data.get("extra", {})
             if coll == "anilist":
                 if ireqs == "ql":
                     # raw query
@@ -1989,25 +1990,25 @@ class IstorayjeBot:
                     )
                     db.drop()
                 elif ireqs == "id":
-                    await respond(update)(iquery_render(query))
+                    await respond(update)(iquery_render(query, extra))
                 elif ireqs == "one":
-                    await respond(update)(qquery_render(query))
+                    await respond(update)(qquery_render(query, extra))
                 elif ireqs == "bychar":
                     # find result by character
-                    await respond(update)(cquery_render(query))
+                    await respond(update)(cquery_render(query, extra))
                 elif ireqs == "char":
-                    await respond(update)(charquery_render(query))
+                    await respond(update)(charquery_render(query, extra))
                 elif ireqs == "":
                     # simple query
-                    await respond(update)(squery_render(data["query"]))
+                    await respond(update)(squery_render(data["query"], extra))
                 else:
                     raise Exception(
                         f"Arguments to source {coll} not understood ({ireqs})"
                     )
             elif self.has_api(user(update).id, coll):
                 try:
-                    res = self.invoke(coll, ireqs, query)
-                    await respond(update)(self.render_api(coll, ireqs, res))
+                    res = self.invoke(coll, ireqs, query, extra)
+                    await respond(update)(self.render_api(coll, ireqs, res, extra))
                 except Exception as e:
                     raise Exception(f"Invalid API invocation: {e}")
             else:
@@ -2082,6 +2083,7 @@ class IstorayjeBot:
                     {
                         "source": coll[1:],
                         "query": " ".join(original_query.strip().split(" ")[1:]),
+                        "extra": extra,
                     },
                     context,
                     update,

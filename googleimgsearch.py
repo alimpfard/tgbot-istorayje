@@ -4,13 +4,15 @@ from bs4 import BeautifulSoup
 import json
 import certifi
 
-SEARCH_URL = 'https://www.google.com/searchbyimage?hl=en-US&image_url='
+SEARCH_URL = "https://www.google.com/searchbyimage?hl=en-US&image_url="
+
 
 def searchGoogleImages(image_url):
     code = doImageSearch(SEARCH_URL + image_url)
     res = parseResults(code)
     print(res)
     return res
+
 
 def doImageSearch(full_url):
     # Directly passing full_url
@@ -19,55 +21,60 @@ def doImageSearch(full_url):
     returned_code = io.BytesIO()
     # full_url = SEARCH_URL + image_url
 
-    print('POST: ' + full_url)
+    print("POST: " + full_url)
 
     conn = pycurl.Curl()
     conn.setopt(conn.CAINFO, certifi.where())
     conn.setopt(conn.URL, str(full_url))
     conn.setopt(conn.FOLLOWLOCATION, 1)
-    conn.setopt(conn.USERAGENT, 'Mozilla/5.0 (Windows NT 6.1; Win64; x64; rv:61.0) Gecko/20100101 Firefox/61.0')
+    conn.setopt(
+        conn.USERAGENT,
+        "Mozilla/5.0 (Windows NT 6.1; Win64; x64; rv:61.0) Gecko/20100101 Firefox/61.0",
+    )
     conn.setopt(conn.WRITEFUNCTION, returned_code.write)
     conn.perform()
     conn.close()
-    return returned_code.getvalue().decode('UTF-8')
+    return returned_code.getvalue().decode("UTF-8")
+
 
 def parseResults(code, resized=False):
     """Parse/Scrape the HTML code for the info we want."""
 
-    soup = BeautifulSoup(code, 'html.parser')
+    soup = BeautifulSoup(code, "html.parser")
 
     results = {
-        'links': [],
-        'descriptions': [],
-        'titles': [],
-        'similar_images': [],
-        'best_guess': ''
+        "links": [],
+        "descriptions": [],
+        "titles": [],
+        "similar_images": [],
+        "best_guess": "",
     }
 
-    for div in soup.findAll('div', attrs={'class':'rc'}):
-        sLink = div.find('a')
-        results['links'].append(sLink['href'])
+    for div in soup.findAll("div", attrs={"class": "rc"}):
+        sLink = div.find("a")
+        results["links"].append(sLink["href"])
 
-    for desc in soup.findAll('span', attrs={'class':'st'}):
-        results['descriptions'].append(desc.get_text())
+    for desc in soup.findAll("span", attrs={"class": "st"}):
+        results["descriptions"].append(desc.get_text())
 
-    for title in soup.findAll('h3', attrs={'class':'r'}):
-        results['titles'].append(title.get_text())
+    for title in soup.findAll("h3", attrs={"class": "r"}):
+        results["titles"].append(title.get_text())
 
-    for similar_image in soup.findAll('div', attrs={'rg_meta'}):
+    for similar_image in soup.findAll("div", attrs={"rg_meta"}):
         tmp = json.loads(similar_image.get_text())
-        img_url = tmp['ou']
-        results['similar_images'].append(img_url)
+        img_url = tmp["ou"]
+        results["similar_images"].append(img_url)
 
-    for best_guess in soup.findAll('a', attrs={'class':'fKDtNb'}):
-      results['best_guess'] = best_guess.get_text()
+    for best_guess in soup.findAll("a", attrs={"class": "fKDtNb"}):
+        results["best_guess"] = best_guess.get_text()
 
     if resized:
-        results['resized_images'] = getDifferentSizes(soup)
+        results["resized_images"] = getDifferentSizes(soup)
 
     print("Successful search")
 
     return results
+
 
 def getDifferentSizes(soup):
     """
@@ -96,9 +103,9 @@ def getDifferentSizes(soup):
     }
     """
 
-    region = soup.find('div',{"class":"O1id0e"})
+    region = soup.find("div", {"class": "O1id0e"})
 
-    span = region.find('span',{"class":"gl"})
+    span = region.find("span", {"class": "gl"})
 
     allsizes = False
 
@@ -111,18 +118,18 @@ def getDifferentSizes(soup):
             print(span)
     except Exception as e:
         print(str(e))
-        return [{'error':'500','details':'no_images_found'}]
+        return [{"error": "500", "details": "no_images_found"}]
 
     if allsizes:
-        new_url = "https://google.com" + span.a['href']
+        new_url = "https://google.com" + span.a["href"]
 
     resized_images_page = doImageSearch(new_url)
 
-    new_soup = BeautifulSoup(resized_images_page,"lxml")
+    new_soup = BeautifulSoup(resized_images_page, "lxml")
 
-    main_div = new_soup.find('div',{"id":"search"})
+    main_div = new_soup.find("div", {"id": "search"})
 
-    rg_meta_divs = main_div.findAll('div',{"class":"rg_meta notranslate"})
+    rg_meta_divs = main_div.findAll("div", {"class": "rg_meta notranslate"})
 
     results = []
 

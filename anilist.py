@@ -36,11 +36,11 @@ def aniquery(qry: str, vars: dict):
     return requests.post(url, json={"query": qry, "variables": vars}).json()
 
 
-def charquery_render(s):
+def charquery_render(s, extras: dict):
     terms = s
     mquery = """
     query {
-        Page(page:1, perPage:10) {
+        Page(page:%d, perPage:10) {
             characters(search: %s) {
                 name {
                     first
@@ -58,8 +58,9 @@ def charquery_render(s):
             }
         }
     }
-    """ % json.dumps(
-        s
+    """ % (
+        extras.get("page", 1),
+        json.dumps(s),
     )
     res = simple_query(litquery=mquery)
     print("got result", res)
@@ -93,11 +94,11 @@ def charquery_render(s):
     return responses
 
 
-def cquery_render(s):
+def cquery_render(s, extras: dict):
     terms = s
     mquery = """
     query {
-        Page(page:1, perPage:5) {
+        Page(page:%d, perPage:5) {
             characters(search: %s) {
                 name { full }
                 media(perPage: 2) {
@@ -134,8 +135,9 @@ def cquery_render(s):
             }
         }
     }
-    """ % json.dumps(
-        s
+    """ % (
+        extras.get("page", 1),
+        json.dumps(s),
     )
     print("query is", mquery)
     media = simple_query(litquery=mquery)
@@ -206,9 +208,9 @@ def cquery_render(s):
     return responses
 
 
-def qquery_render(s):
+def qquery_render(s, extras: dict):
     terms = id
-    media = simple_query(_query=s)
+    media = simple_query(_query=s, page=extras.get("page", 1))
     print("Got result", media)
     media = [media["data"]["Media"]]
     responses = [
@@ -271,9 +273,9 @@ def qquery_render(s):
     return responses
 
 
-def iquery_render(id):
+def iquery_render(id, extras: dict):
     terms = id
-    media = simple_query(_query=f"id:{id}")
+    media = simple_query(_query=f"id:{id}", page=extras.get("page", 1))
     print("Got result", media)
     media = [media["data"]["Media"]]
     responses = [
@@ -336,8 +338,8 @@ def iquery_render(id):
     return responses
 
 
-def squery_render(terms: str):
-    media = simple_query(terms)
+def squery_render(terms: str, extras: dict):
+    media = simple_query(terms, page=extras.get("page", 1))
     print("Got result", media)
     media = media["data"]["Page"]["media"]
     responses = [
@@ -400,7 +402,7 @@ def squery_render(terms: str):
     return responses
 
 
-def simple_query(terms=None, _query=None, litquery=None):
+def simple_query(terms=None, _query=None, litquery=None, page=1):
     if litquery:
         return aniquery(litquery, {})
     return aniquery(
@@ -477,5 +479,5 @@ def simple_query(terms=None, _query=None, litquery=None):
             }
         """
         ),
-        dict(search=terms, page=1, perPage=5) if _query is None else {},
+        dict(search=terms, page=page, perPage=5) if _query is None else {},
     )
