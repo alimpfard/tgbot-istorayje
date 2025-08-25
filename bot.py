@@ -1649,6 +1649,7 @@ class IstorayjeBot:
     reg = re.compile(r"\s+")
 
     def parse_query(self, gquery):
+        original_query = gquery
         gquery = gquery.strip() + " "
         coll = ""
         parsed_coll = False
@@ -1665,6 +1666,7 @@ class IstorayjeBot:
             if num:
                 extra["page"] = int(num.group(1))
                 gquery = num.group(2)
+                original_query = original_query.strip().removeprefix(f"+{num.group(1)} ")
             else:
                 gquery = "+" + gquery
         while len(gquery):
@@ -1702,7 +1704,7 @@ class IstorayjeBot:
         if query != []:
             qstack.append(query)
 
-        return coll, qstack, extra
+        return original_query, coll, qstack, extra
 
     def resolve_alias(self, alias, user_id, alias_map={}):
         aliases = self.db.db.aliases.find_one({"user_id": user_id})
@@ -2049,8 +2051,7 @@ class IstorayjeBot:
             query = read(update)
             if not implicit_collection.startswith("implicit$"):
                 query = implicit_collection + " " + query
-            original_query = query
-            coll, query, extra = self.parse_query(query)
+            original_query, coll, query, extra = self.parse_query(query)
             coll = self.resolve_alias(coll, user(update).id)
             possible_update = self.db.db.late_share.find_one_and_delete(
                 {"username": user(update).username}
