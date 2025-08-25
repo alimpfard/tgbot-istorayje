@@ -239,7 +239,8 @@ class APIHandler(object):
             "identity",
         )
         self.metavarre = re.compile(r"(?!\\)\$([\w:]+)")
-        self.page_re = re.compile(r"(?!\\)\#page")
+        self.page_re = re.compile(r"(?!\\)\#page\[(\w+)\]\((.*)\)") # #page[var](...#var...)
+        self.page_var_re = lambda var: re.compile(rf"(?!\\)\#{var}\b") # #var
         self.server_thread = Thread(target=self.run_flask_server)
         self.server_port = int(environ.get("PORT", "8080")) + 1
         self.cached_images: dict[str, Image.Image] = {}
@@ -438,7 +439,11 @@ class APIHandler(object):
 
         def res(path=path):
             if "page" in extra:
-                path = self.page_re.sub(str(extra["page"]), path)
+                path = self.page_re.sub(
+                    (lambda match: self.page_var_re(match.group(1)).sub(str(extra["page"]), match.group(2))),
+                    path)
+            else:
+                path = self.page_re.sub("", path)
 
             if comm_type == "identity":
                 return self.metavarre.sub(q, path)

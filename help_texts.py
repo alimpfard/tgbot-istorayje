@@ -254,6 +254,10 @@ API handler documentation
 
 Comm types
 
+"metavars" are of the following forms:
+- `$var` (as declared in the API), refers to some variable `var` as the result of a previous step (e.g. input adapter result in the output adapter, or user input in the input adapter)
+- `#page[name](...#name...)` (e.g. `#page[p](&pid=#p)`), refers to the page value as passed in the query (prefix +pagenum: `+1 collection query`), resolves to the subexpression with the metavar replaced (`&pid=1` if `+1` is the current page) or nothing if no page is passed.
+
 the available comm types are:
 - http/link
     metavar in url: Yes
