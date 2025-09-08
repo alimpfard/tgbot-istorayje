@@ -269,7 +269,7 @@ the available comm types are:
     metavar in url: Yes, through input.pvalue
     response type: Dictionary
     behvaiour: substitutes the metavar, sends a post request, returns output
-    expected input adapter output: {pvalue: string, value: T}
+    expected input adapter output: {pvalue?: string, value?: T}
 
 - html/xpath
     metavar in url: Yes
@@ -289,6 +289,15 @@ DSL Documentation
 A single python expression with the following extensions
 
 - expr @json - jsonifies expr
+- expr @image - if `expr` is a dict of {url, caption?, thumb_url}, yields that as an input media result, otherwise tries to download the url (data URI supported).
+- expr @freshVar - yields an identifier that can be used to retrieve `expr` in a later query (no lifetime guarantee)
+- expr @varStore - yields a value associated with `expr` as an identifier; see @freshVar
+- expr @query - if `expr` refers to the input of the adapter, yields the original query string (otherwise nothing)
+- expr @catch - catches exceptions in expr, yields None on exception
+- expr @(nextStep(description)) - yields `expr`, with an inline keyboard attached according to `description`:
+    description is either a "query" string, or a dictionary of {button text: query string}
+    where the "query" string itself is either an https:// URL, or a further query to pass to the bot inline interface
+    To refer to external collections, surround the collection with backticks (not monospaced, literal backtick characters)
 - ${metavar} - replaced with the value of the metavar
 
 

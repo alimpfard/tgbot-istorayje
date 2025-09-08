@@ -399,6 +399,10 @@ class APIHandler(object):
         self.flush()
 
     def tgwrap(self, query, _type, stuff):
+        def make_button(text: str, query: str):
+            if query.startswith("http://") or query.startswith("https://"):
+                return InlineKeyboardButton(text=text, url=query)
+            return InlineKeyboardButton(text=text, switch_inline_query_current_chat=query)
         def convert_to_result(uuid: UUID, k, x, rest):
             print(x)
             reply_markup = None
@@ -406,7 +410,7 @@ class APIHandler(object):
                 buttons = { "Next Step": k.query } if isinstance(k.query, str) else k.query
                 reply_markup = InlineKeyboardMarkup(
                     inline_keyboard=[
-                        [InlineKeyboardButton(text=k, switch_inline_query_current_chat=v) for k, v in buttons.items()]
+                        [make_button(k, v) for k, v in buttons.items()]
                     ]
                 )
                 k = k.obj
