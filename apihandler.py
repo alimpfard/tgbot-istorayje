@@ -10,6 +10,8 @@ from telegram import (
     InputTextMessageContent,
     InlineQueryResultPhoto,
     InlineQueryResultGif,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
 )
 from telegram.constants import ParseMode
 from uuid import uuid4, UUID
@@ -23,6 +25,11 @@ from threading import Thread
 from type import checked_as
 
 import xxhash
+import base64
+import io
+
+
+VAR_STORE = {}
 
 
 def subv(xbody, iotype, name):
@@ -81,6 +88,22 @@ def get_source_query(x):
     except AttributeError:
         return None
 
+class NextStep:
+    def __init__(self, obj, query):
+        self.obj = obj
+        self.query = query
+
+
+def set_next_step(x, query):
+    # query must be either a string, or a dict of "button text" -> query.
+    if not isinstance(query, (str, dict)):
+        raise Exception("nextStep argument must be either string or dict")
+    if isinstance(query, dict):
+        for k in query:
+            if not isinstance(k, str) or not isinstance(query[k], str):
+                raise Exception("nextStep dict must be string -> string")
+
+    return NextStep(x, query)
 
 class InternalPhoto:
     def __init__(self, url, thumb_url=None, caption=None):
@@ -91,11 +114,35 @@ class InternalPhoto:
 
 def construct_image(obj):
     if isinstance(obj, str):
+        if obj.startswith("data:image/"):
+            # Actually not a URL, but a base64-encoded image
+            # Parse it and present as Image
+            # Extract the base64 data from the data URL
+            _, data = obj.split(',', 1)
+            # Decode the base64 data
+            image_data = base64.b64decode(data)
+            # Create a PIL Image from the decoded data
+            image = Image.open(io.BytesIO(image_data))
+            return image
         return InternalPhoto(obj)
     if isinstance(obj, dict):
         return InternalPhoto(**obj)
     raise Exception("Invalid kind for @image " + str(type(obj)))
 
+
+def get_var_store(x):
+    global VAR_STORE
+    if not isinstance(x, str):
+        raise Exception("varStore argument must be string")
+    if x not in VAR_STORE:
+        return None
+    return VAR_STORE[x]
+
+def set_var_store(value):
+    global VAR_STORE
+    x = uuid4().hex
+    VAR_STORE[x] = value
+    return x
 
 def from_json(x):
     return DotDict({"x": json.loads(x)}).x
@@ -130,71 +177,119 @@ class TypeCastTransformationVisitor(ast.NodeTransformer):
         self.uses = {
             "json": False,
             "query": False,
+            "varstore": False,
         }
 
     def start(self):
         self.uses = {
             "json": False,
             "query": False,
+            "varstore": False,
         }
         return self
 
     def visit_BinOp(self, node: ast.BinOp):
-        if isinstance(node.op, ast.MatMult) and isinstance(node.right, ast.Name):
-            self.generic_visit(node)
-            # x @ty -> transform
-            if node.right.id.lower() == "json":
-                self.uses["json"] = True
-                return ast.copy_location(
-                    ast.Call(
-                        func=ast.Name("global_to_json"), args=[node.left], keywords=[]
-                    ),
-                    node,
-                )
-            elif node.right.id.lower() == "image":
-                self.uses["query"] = True
-                return ast.copy_location(
-                    ast.Call(
-                        func=ast.Name("global_construct_image"),
-                        args=[node.left],
-                        keywords=[],
-                    ),
-                    node,
-                )
-            elif node.right.id.lower() == "query":
-                return ast.copy_location(
-                    ast.Call(
-                        func=ast.Name("global_get_source_query"),
-                        args=[node.left],
-                        keywords=[],
-                    ),
-                    node,
-                )
-            elif node.right.id.lower() == "catch":
-                return ast.copy_location(
-                    ast.Call(
-                        func=ast.Name("global_suppress_exceptions"),
-                        args=[
-                            ast.copy_location(
-                                ast.Lambda(
-                                    args=ast.arguments(
-                                        args=[],
-                                        posonlyargs=[],
-                                        vararg=None,
-                                        kwonlyargs=[],
-                                        kw_defaults=[],
-                                        kwarg=None,
-                                        defaults=[],
+        if isinstance(node.op, ast.MatMult):
+            if isinstance(node.right, ast.Name):
+                self.generic_visit(node)
+                # x @ty -> transform
+                if node.right.id.lower() == "json":
+                    self.uses["json"] = True
+                    return ast.copy_location(
+                        ast.Call(
+                            func=ast.Name("global_to_json"),
+                            args=[node.left],
+                            keywords=[],
+                        ),
+                        node,
+                    )
+                elif node.right.id.lower() == "image":
+                    self.uses["query"] = True
+                    return ast.copy_location(
+                        ast.Call(
+                            func=ast.Name("global_construct_image"),
+                            args=[node.left],
+                            keywords=[],
+                        ),
+                        node,
+                    )
+                elif node.right.id.lower() == "varstore":
+                    # uuid @ varStore -> value
+                    self.uses["varstore"] = True
+                    return ast.copy_location(
+                        ast.Call(
+                            func=ast.Name("global_get_var_store"),
+                            args=[node.left],
+                            keywords=[],
+                        ),
+                        node,
+                    )
+                elif node.right.id.lower() == "freshvar":
+                    # x @ freshvar -> (uuid)
+                    self.uses["varstore"] = True
+                    return ast.copy_location(
+                        ast.Call(
+                            func=ast.Name("global_set_var_store"),
+                            args=[node.left],
+                            keywords=[],
+                        ),
+                        node,
+                    )
+                elif node.right.id.lower() == "query":
+                    return ast.copy_location(
+                        ast.Call(
+                            func=ast.Name("global_get_source_query"),
+                            args=[node.left],
+                            keywords=[],
+                        ),
+                        node,
+                    )
+                elif node.right.id.lower() == "catch":
+                    return ast.copy_location(
+                        ast.Call(
+                            func=ast.Name("global_suppress_exceptions"),
+                            args=[
+                                ast.copy_location(
+                                    ast.Lambda(
+                                        args=ast.arguments(
+                                            args=[],
+                                            posonlyargs=[],
+                                            vararg=None,
+                                            kwonlyargs=[],
+                                            kw_defaults=[],
+                                            kwarg=None,
+                                            defaults=[],
+                                        ),
+                                        body=node.left,
                                     ),
-                                    body=node.left,
-                                ),
-                                node,
-                            )
-                        ],
-                        keywords=[],
-                    ),
-                    node,
-                )
+                                    node,
+                                )
+                            ],
+                            keywords=[],
+                        ),
+                        node,
+                    )
+            elif isinstance(node.right, ast.Call) and isinstance(
+                node.right.func, ast.Name
+            ):
+                self.generic_visit(node)
+                # x @ f(...) -> transform
+                if node.right.func.id.lower() == "nextstep":
+                    # x#nextStep(query) -> set_next_step(x, query)
+                    if len(node.right.args) != 1:
+                        raise Exception(
+                            f"nextStep expects exactly one argument, got {len(node.right.args)}"
+                        )
+                    return ast.copy_location(
+                        ast.Call(
+                            func=ast.Name("set_next_step"),
+                            args=[node.left, node.right.args[0]],
+                            keywords=[],
+                        ),
+                        node,
+                    )
+            # not a type, visit it
+            self.generic_visit(node)
         else:
             # not a name, visit it
             self.generic_visit(node)
@@ -239,40 +334,11 @@ class APIHandler(object):
             "identity",
         )
         self.metavarre = re.compile(r"(?!\\)\$([\w:]+)")
-        self.page_re = re.compile(r"(?!\\)\#page\[(\w+)\]\((.*)\)") # #page[var](...#var...)
-        self.page_var_re = lambda var: re.compile(rf"(?!\\)\#{var}\b") # #var
-        self.server_thread = Thread(target=self.run_flask_server)
-        self.server_port = int(environ.get("PORT", "8080")) + 1
+        self.page_re = re.compile(
+            r"(?!\\)\#page\[(\w+)\]\((.*)\)"
+        )  # #page[var](...#var...)
+        self.page_var_re = lambda var: re.compile(rf"(?!\\)\#{var}\b")  # #var
         self.cached_images: dict[str, Image.Image] = {}
-
-    def run_flask_server(self):
-        app = Flask(__name__)
-
-        @app.route("/image/<hash>")
-        def get_image(hash):
-            if hash not in self.cached_images:
-                response = make_response("Nothing here mate")
-                response.status_code = 404
-                return response
-
-            response = make_response(self.cached_images[hash].tobytes("jpeg"))
-            response.content_type = "image/jpg"
-            return response
-
-        @app.route("/thumb/<hash>")
-        def get_thumb(hash):
-            if hash not in self.cached_images:
-                response = make_response("Nothing here mate")
-                response.status_code = 404
-                return response
-
-            response = make_response(
-                self.cached_images[hash].resize(size=(128, 128)).tobytes("jpeg")
-            )
-            response.content_type = "image/jpg"
-            return response
-
-        app.run(host="0.0.0.0", port=self.server_port, load_dotenv=False)
 
     def flush(self):
         self.bot.db.db.external_apis.update_one(
@@ -335,6 +401,17 @@ class APIHandler(object):
     def tgwrap(self, query, _type, stuff):
         def convert_to_result(uuid: UUID, k, x, rest):
             print(x)
+            reply_markup = None
+            if isinstance(k, NextStep):
+                buttons = { "Next Step": k.query } if isinstance(k.query, str) else k.query
+                reply_markup = InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [InlineKeyboardButton(text=k, switch_inline_query_current_chat=v) for k, v in buttons.items()]
+                    ]
+                )
+                k = k.obj
+                print("next step:", reply_markup)
+
             if isinstance(x, str):
                 return InlineQueryResultArticle(
                     id=str(uuid),
@@ -344,6 +421,7 @@ class APIHandler(object):
                         parse_mode={"markdown": "Markdown", "html": "HTML"}.get(_type),
                     ),
                     thumbnail_url=None if len(rest) == 0 else rest[0],
+                    reply_markup=reply_markup,
                 )
             if isinstance(x, InternalPhoto):
                 return InlineQueryResultPhoto(
@@ -352,11 +430,12 @@ class APIHandler(object):
                     photo_url=x.url,
                     thumbnail_url=x.thumb_url,
                     caption=x.caption,
+                    reply_markup=reply_markup,
                 )
             if isinstance(x, Image.Image):
                 hash = xxhash.xxh64(x.tobytes()).digest().hex()
-                url = f"{environ.get('APP_URL')}:{self.server_port}/image/{hash}"
-                thumb_url = f"{environ.get('APP_URL')}:{self.server_port}/thumb/{hash}"
+                url = f"{environ.get('APP_URL')}/image/{hash}"
+                thumb_url = f"{environ.get('APP_URL')}/thumb/{hash}"
 
                 size = 0
                 for key in self.cached_images:
@@ -375,7 +454,10 @@ class APIHandler(object):
                     title=f"result {k}",
                     photo_url=url,
                     thumbnail_url=thumb_url,
+                    photo_height=x.height,
+                    photo_width=x.width,
                     caption=k,
+                    reply_markup=reply_markup,
                 )
                 print(res)
                 return res
@@ -383,9 +465,21 @@ class APIHandler(object):
                 id=str(uuid),
                 title=f"{k} - Unknown result type",
                 input_message_content=InputTextMessageContent(to_json(x)),
+                reply_markup=reply_markup,
             )
 
-        return [convert_to_result(uuid4(), k, x, rest) for k, x, *rest in stuff]
+        items = []
+        for v in stuff:
+            if isinstance(v, NextStep):
+                items.append((NextStep(v.obj[0], v.query), *v.obj[1:]))
+            else:
+                items.append(v)
+
+        x = [convert_to_result(uuid4(), k, x, rest) for k, x, *rest in items]
+        print("tgwrap", query, _type, stuff, "->")
+        for xx in x:
+            print("   ", xx.to_json())
+        return x
 
     def declare(self, name, comm_type, inp, out, path):
         if name in self.apis:
@@ -411,6 +505,8 @@ class APIHandler(object):
             env.update({"global_suppress_exceptions": suppress_exceptions})
         if "global_get_source_query" not in env:
             env.update({"global_get_source_query": get_source_query})
+        if "set_next_step" not in env:
+            env.update({"set_next_step": set_next_step})
         if len(uses) > 0:
             uses = uses[0]
             if uses:
@@ -418,6 +514,8 @@ class APIHandler(object):
                     env.update({"global_to_json": to_json})
                 if "query" in uses and uses["query"]:
                     env.update({"global_construct_image": construct_image})
+                if "varstore" in uses and uses["varstore"]:
+                    env.update({"global_get_var_store": get_var_store, "global_set_var_store": set_var_store})
 
         env.update({"strip_tags": strip_tags})
         return (
@@ -436,12 +534,20 @@ class APIHandler(object):
         inpv = self.input_adapters[inp]
 
         _, q = self.adapter(inp, inpv, query, env=extra)
+        if isinstance(q, NextStep):
+            # Input cannot have nextStep, remove it
+            q = q.obj
 
         def res(path=path):
             if "page" in extra:
                 path = self.page_re.sub(
-                    (lambda match: self.page_var_re(match.group(1)).sub(str(extra["page"]), match.group(2))),
-                    path)
+                    (
+                        lambda match: self.page_var_re(match.group(1)).sub(
+                            str(extra["page"]), match.group(2)
+                        )
+                    ),
+                    path,
+                )
             else:
                 path = self.page_re.sub("", path)
 
@@ -454,7 +560,9 @@ class APIHandler(object):
 
             if comm_type == "json/post":
                 path = self.metavarre.sub(q.get("pvalue", ""), path)
-                res = requests.post(path, data=q.get("value", {}))
+                body = json.dumps(q.get("value", {}))
+                print("posting to", path, "data", body)
+                res = requests.post(path, data=body, headers={"Content-Type": "application/json"})
                 return DotDict({"x": res.json()}).x
 
             if comm_type == "http/json":
@@ -482,6 +590,7 @@ class APIHandler(object):
             raise Exception(f"type {comm_type} not yet implemented")
 
         r = res()
+        print("result:", r)
         setattr(r, "__source_query__", q)
         return r
 

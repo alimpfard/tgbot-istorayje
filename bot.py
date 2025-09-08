@@ -1,4 +1,5 @@
 import asyncio
+from flask import make_response
 from telegram.ext import (
     Updater,
     CommandHandler,
@@ -27,6 +28,8 @@ import telegram
 from telegram import Bot
 from telegram.constants import ParseMode
 import signal
+from flask import Flask, request, jsonify
+import threading
 
 # from googlecloud import getCloudAPIDetails
 from googleimgsearch import searchGoogleImages
@@ -201,6 +204,50 @@ class IstorayjeBot:
         for sig in stop_signals:
             loop.add_signal_handler(sig, self.primary_app._raise_system_exit)
 
+        APP_URL = os.environ.get("APP_URL")
+        if APP_URL is not None:
+            PORT = int(os.environ.get("PORT", "8443"))
+            print(
+                f"Warning: APP_URL is set, but starting in polling mode. If you want to use webhooks, set MODE=prod and run in production mode. Current APP_URL: {APP_URL}, PORT: {PORT}"
+            )
+            app = Flask(__name__)
+
+            @app.route("/image/<hash>", methods=["GET"])
+            def proxy_image(hash):
+                _self = self.external_api_handler
+                if hash not in _self.cached_images:
+                    response = make_response("Nothing here mate")
+                    response.status_code = 404
+                    return response
+
+                io = BytesIO()
+                _self.cached_images[hash].save(io, format="JPEG")
+                response = make_response(io.getvalue())
+                response.content_type = "image/jpg"
+                return response
+
+            @app.route("/thumb/<hash>", methods=["GET"])
+            def proxy_thumb(hash):
+                _self = self.external_api_handler
+                if hash not in _self.cached_images:
+                    response = make_response("Nothing here mate")
+                    response.status_code = 404
+                    return response
+
+                io = BytesIO()
+
+                _self.cached_images[hash].resize(size=(128, 128)).save(io, format="JPEG")
+                response = make_response(io.getvalue())
+                response.content_type = "image/jpg"
+                return response
+
+            threading.Thread(
+                target=lambda: app.run(
+                    host="0.0.0.0",
+                    port=PORT,
+                )
+            ).start()
+
         try:
             for app in self.apps:
                 try:
@@ -243,22 +290,38 @@ class IstorayjeBot:
         PORT = int(os.environ.get("PORT", "8443"))
         APP_URL = os.environ.get("APP_URL")
 
-        # If there's only one updater, use the simple approach
-        if len(self.apps) == 1:
-            self.apps[0].run_webhook(
-                listen="0.0.0.0",
-                port=PORT,
-                url_path=self.tokens[0],
-                webhook_url="{}/{}".format(APP_URL, self.tokens[0]),
-            )
-            return
-
-        # For multiple updaters, we need a router
-        from flask import Flask, request, jsonify
-        import threading
         import logging
 
         app = Flask(__name__)
+
+        @app.route("/image/<hash>", methods=["GET"])
+        def proxy_image(hash):
+            _self = self.external_api_handler
+            if hash not in _self.cached_images:
+                response = make_response("Nothing here mate")
+                response.status_code = 404
+                return response
+
+            io = BytesIO()
+            _self.cached_images[hash].save(io, format="JPEG")
+            response = make_response(io.getvalue())
+            response.content_type = "image/jpg"
+            return response
+
+        @app.route("/thumb/<hash>", methods=["GET"])
+        def proxy_thumb(hash):
+            _self = self.external_api_handler
+            if hash not in _self.cached_images:
+                response = make_response("Nothing here mate")
+                response.status_code = 404
+                return response
+
+            io = BytesIO()
+
+            _self.cached_images[hash].resize(size=(128, 128)).save(io, format="JPEG")
+            response = make_response(io.getvalue())
+            response.content_type = "image/jpg"
+            return response
 
         @app.route("/<path:token>", methods=["POST"])
         def webhook(token):
@@ -1666,7 +1729,9 @@ class IstorayjeBot:
             if num:
                 extra["page"] = int(num.group(1))
                 gquery = num.group(2)
-                original_query = original_query.strip().removeprefix(f"+{num.group(1)} ")
+                original_query = original_query.strip().removeprefix(
+                    f"+{num.group(1)} "
+                )
             else:
                 gquery = "+" + gquery
         while len(gquery):
@@ -1704,6 +1769,8 @@ class IstorayjeBot:
         if query != []:
             qstack.append(query)
 
+        if coll.startswith('`@') and coll.endswith('`'):
+            coll = coll[1:-1] # `@foo` -> @foo since TG's inline query markup can't contain @word.
         return original_query, coll, qstack, extra
 
     def resolve_alias(self, alias, user_id, alias_map={}):
