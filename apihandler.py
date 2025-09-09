@@ -168,7 +168,6 @@ def strip_tags(html):
     s = MLStripper()
     s.feed(html)
     x = s.get_data()
-    print("stripped:", x)
     return x.strip()
 
 
@@ -404,7 +403,6 @@ class APIHandler(object):
                 return InlineKeyboardButton(text=text, url=query)
             return InlineKeyboardButton(text=text, switch_inline_query_current_chat=query)
         def convert_to_result(uuid: UUID, k, x, rest):
-            print(x)
             reply_markup = None
             if isinstance(k, NextStep):
                 buttons = { "Next Step": k.query } if isinstance(k.query, str) else k.query
@@ -414,7 +412,6 @@ class APIHandler(object):
                     ]
                 )
                 k = k.obj
-                print("next step:", reply_markup)
 
             if isinstance(x, str):
                 return InlineQueryResultArticle(
@@ -463,7 +460,6 @@ class APIHandler(object):
                     caption=k,
                     reply_markup=reply_markup,
                 )
-                print(res)
                 return res
             return InlineQueryResultArticle(
                 id=str(uuid),
@@ -480,9 +476,6 @@ class APIHandler(object):
                 items.append(v)
 
         x = [convert_to_result(uuid4(), k, x, rest) for k, x, *rest in items]
-        print("tgwrap", query, _type, stuff, "->")
-        for xx in x:
-            print("   ", xx.to_json())
         return x
 
     def declare(self, name, comm_type, inp, out, path):
@@ -565,7 +558,6 @@ class APIHandler(object):
             if comm_type == "json/post":
                 path = self.metavarre.sub(q.get("pvalue", ""), path)
                 body = json.dumps(q.get("value", {}))
-                print("posting to", path, "data", body)
                 res = requests.post(path, data=body, headers={"Content-Type": "application/json"})
                 return DotDict({"x": res.json()}).x
 
@@ -594,7 +586,6 @@ class APIHandler(object):
             raise Exception(f"type {comm_type} not yet implemented")
 
         r = res()
-        print("result:", r)
         setattr(r, "__source_query__", q)
         return r
 
