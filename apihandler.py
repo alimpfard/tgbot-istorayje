@@ -83,10 +83,7 @@ def suppress_exceptions(f):
 
 
 def get_source_query(x):
-    try:
-        return getattr(x, "__source_query__")
-    except AttributeError:
-        return None
+    return getattr(x, "__source_query__", None)
 
 class NextStep:
     def __init__(self, obj, query):
@@ -586,7 +583,10 @@ class APIHandler(object):
             raise Exception(f"type {comm_type} not yet implemented")
 
         r = res()
-        setattr(r, "__source_query__", q)
+        try:
+            setattr(r, "__source_query__", q)
+        except:
+            pass
         return r
 
     def render(self, api, value, extra):
