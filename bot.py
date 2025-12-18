@@ -423,7 +423,7 @@ class IstorayjeBot:
     ):
         await context.bot.send_message(
             chat_id=update.message.chat.id,
-            text=f"""Hello there General Kenobi - {update.message.from_user.id}@{update.message.chat.id}\nWe are live at {context.bot}""",
+            text=f"""Hello there General Kenobi - {update.message.from_user.id}@{update.message.chat.id}\nWe are live!""",
         )
 
     async def on_result_chosen(
