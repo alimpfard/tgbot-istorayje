@@ -1321,6 +1321,49 @@ class IstorayjeBot:
         except:
             pass
 
+        # implicit group command: treat group messages as queries
+        try:
+            if (
+                update.message
+                and update.message.text
+                and update.message.from_user
+                and update.message.chat.type in ("group", "supergroup")
+                and not update.message.text.startswith("/")
+                and not update.message.text.startswith("set:")
+                and not update.message.text.startswith("^")
+                and not update.message.text.startswith(".ext ")
+            ):
+                implicit_group_cmd = self.resolve_alias(
+                    f"implicit_group${context.bot.username}",
+                    update.message.from_user.id,
+                )
+                if not implicit_group_cmd.startswith("implicit_group$"):
+                    query_text = implicit_group_cmd + " " + update.message.text
+                    msg = update.message
+
+                    def do_respond_group(*_):
+                        async def res(inline_query_results, **_):
+                            for result in inline_query_results:
+                                sent = await self.send_inline_result_as_reply(
+                                    context, result, msg.chat.id, msg.message_id
+                                )
+                                if sent:
+                                    return
+
+                        return res
+
+                    await self.handle_query(
+                        (query_text, msg),
+                        context,
+                        respond=do_respond_group,
+                        read=lambda x: x[0],
+                        user=lambda x: x[1].from_user,
+                        skip_implicit=True,
+                    )
+                    return
+        except Exception:
+            traceback.print_exc()
+
         # probably index update...or stray message
         username = None
         if update.message:
@@ -2098,6 +2141,81 @@ class IstorayjeBot:
                 cache_time=10,
             )
 
+    async def send_inline_result_as_reply(self, context, result, chat_id, reply_to_message_id):
+        """Send an inline query result as a message reply. Returns True if sent."""
+        try:
+            if isinstance(result, InlineQueryResultArticle):
+                if result.title.startswith(">> ") or "no result" in result.title or "Exception" in result.title or "no temp" in result.title:
+                    return False
+                content = result.input_message_content
+                if content:
+                    await context.bot.send_message(
+                        chat_id=chat_id,
+                        text=content.message_text,
+                        parse_mode=getattr(content, "parse_mode", None),
+                        reply_to_message_id=reply_to_message_id,
+                    )
+                    return True
+            elif isinstance(result, InlineQueryResultCachedPhoto):
+                await context.bot.send_photo(
+                    chat_id=chat_id,
+                    photo=result.photo_file_id,
+                    caption=result.caption,
+                    reply_to_message_id=reply_to_message_id,
+                )
+                return True
+            elif isinstance(result, InlineQueryResultCachedGif):
+                await context.bot.send_animation(
+                    chat_id=chat_id,
+                    animation=result.gif_file_id,
+                    caption=result.caption,
+                    reply_to_message_id=reply_to_message_id,
+                )
+                return True
+            elif isinstance(result, InlineQueryResultCachedMpeg4Gif):
+                await context.bot.send_animation(
+                    chat_id=chat_id,
+                    animation=result.mpeg4_file_id,
+                    caption=result.caption,
+                    reply_to_message_id=reply_to_message_id,
+                )
+                return True
+            elif isinstance(result, InlineQueryResultCachedSticker):
+                await context.bot.send_sticker(
+                    chat_id=chat_id,
+                    sticker=result.sticker_file_id,
+                    reply_to_message_id=reply_to_message_id,
+                )
+                return True
+            elif isinstance(result, InlineQueryResultCachedDocument):
+                await context.bot.send_document(
+                    chat_id=chat_id,
+                    document=result.document_file_id,
+                    caption=result.caption,
+                    reply_to_message_id=reply_to_message_id,
+                )
+                return True
+            elif isinstance(result, InlineQueryResultCachedVoice):
+                await context.bot.send_voice(
+                    chat_id=chat_id,
+                    voice=result.voice_file_id,
+                    caption=result.caption,
+                    reply_to_message_id=reply_to_message_id,
+                )
+                return True
+            elif isinstance(result, InlineQueryResultCachedAudio):
+                await context.bot.send_audio(
+                    chat_id=chat_id,
+                    audio=result.audio_file_id,
+                    caption=result.caption,
+                    reply_to_message_id=reply_to_message_id,
+                )
+                return True
+        except Exception as e:
+            print(f"Failed to send inline result as reply: {e}")
+            traceback.print_exc()
+        return False
+
     async def handle_query(
         self,
         update: T,
@@ -2107,17 +2225,19 @@ class IstorayjeBot:
         respond: Callable[[T], Callable[..., Awaitable]] = lambda x: x.inline_query.answer,  # type: ignore
         read: Callable[[T], str] = lambda x: x.inline_query.query,  # type: ignore
         user: Callable[[T], Optional[telegram.User]] = lambda x: x.inline_query.from_user,  # type: ignore
+        skip_implicit=False,
     ):
         query = None
         coll = None
 
         try:
-            implicit_collection = self.resolve_alias(
-                f"implicit${context.bot.username}", user(update).id
-            )
             query = read(update)
-            if not implicit_collection.startswith("implicit$"):
-                query = implicit_collection + " " + query
+            if not skip_implicit:
+                implicit_collection = self.resolve_alias(
+                    f"implicit${context.bot.username}", user(update).id
+                )
+                if not implicit_collection.startswith("implicit$"):
+                    query = implicit_collection + " " + query
             original_query, coll, query, extra = self.parse_query(query)
             coll = self.resolve_alias(coll, user(update).id)
             possible_update = self.db.db.late_share.find_one_and_delete(
@@ -2631,6 +2751,22 @@ class IstorayjeBot:
             )
             await update.message.reply_text(
                 f'Added implicit collection alias "{args[0]}" for bot "{context.bot.username}" (this one)'
+            )
+            return
+        elif cmd == "implicit_group":
+            if len(args) != 1:
+                await update.message.reply_text(
+                    f"invalid number of arguments, expected 1, got {len(args)}"
+                )
+                return
+            self.db.db.aliases.find_one_and_update(
+                {"user_id": update.message.from_user.id},
+                {"$set": {f"aliases.implicit_group${context.bot.username}": args[0]}},
+                upsert=True,
+            )
+            await update.message.reply_text(
+                f'Added implicit group command "{args[0]}" for bot "{context.bot.username}" (this one)\n'
+                f"Messages you send in groups will be used as queries to this command."
             )
             return
         else:
