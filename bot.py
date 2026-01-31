@@ -1361,6 +1361,7 @@ class IstorayjeBot:
                         skip_implicit=True,
                     )
                     return
+                return # Don't proceed to index update handling
         except Exception:
             traceback.print_exc()
 
