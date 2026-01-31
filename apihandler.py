@@ -1,4 +1,5 @@
 import ast
+import builtins as _builtins_module
 from os import environ
 
 import astor
@@ -30,6 +31,96 @@ import io
 
 
 VAR_STORE = {}
+
+# --- Sandbox safety infrastructure ---
+
+ALLOWED_IMPORT_MODULES = frozenset({
+    # Modules actually used in existing API definitions
+    'urllib', 're', 'random', 'pint', 'bs4', 'lxml',
+    # Safe utility modules
+    'json', 'math', 'string', 'collections', 'itertools', 'functools',
+    'datetime', 'decimal', 'fractions', 'operator',
+    'html', 'xml', 'base64', 'hashlib', 'hmac',
+    'textwrap', 'unicodedata', 'difflib',
+})
+
+_real_import = _builtins_module.__import__
+
+
+def _safe_import(name, *args, **kwargs):
+    """Restricted __import__ that only allows whitelisted modules."""
+    top_level = name.split('.')[0]
+    if top_level not in ALLOWED_IMPORT_MODULES:
+        raise ImportError(
+            f"importing '{name}' is not allowed in API definitions; "
+            f"allowed modules: {', '.join(sorted(ALLOWED_IMPORT_MODULES))}"
+        )
+    return _real_import(name, *args, **kwargs)
+
+
+SAFE_BUILTINS = {
+    '__import__': _safe_import,
+    'abs': abs, 'all': all, 'any': any, 'bool': bool, 'chr': chr,
+    'dict': dict, 'enumerate': enumerate, 'filter': filter, 'float': float,
+    'format': format, 'frozenset': frozenset, 'hasattr': hasattr, 'hash': hash,
+    'int': int, 'isinstance': isinstance, 'issubclass': issubclass,
+    'iter': iter, 'len': len, 'list': list, 'map': map, 'max': max,
+    'min': min, 'next': next, 'ord': ord, 'pow': pow, 'print': print,
+    'range': range, 'repr': repr, 'reversed': reversed, 'round': round,
+    'set': set, 'slice': slice, 'sorted': sorted, 'str': str, 'sum': sum,
+    'tuple': tuple, 'zip': zip,
+    'True': True, 'False': False, 'None': None,
+}
+
+
+class SafetyValidator(ast.NodeVisitor):
+    """Validates that an AST does not contain dangerous constructs at define-time."""
+
+    FORBIDDEN_NAMES = frozenset({
+        '__builtins__', '__loader__', '__spec__',
+        '__build_class__', '__name__', '__file__',
+        'exec', 'eval', 'compile', 'open', 'breakpoint',
+        'getattr', 'setattr', 'delattr',
+        'globals', 'locals', 'vars',
+        'exit', 'quit', 'input',
+    })
+
+    ALLOWED_DUNDERS = frozenset({
+        '__import__',
+    })
+
+    def visit_Import(self, node):
+        raise ValueError("import statements are not allowed in API definitions")
+
+    def visit_ImportFrom(self, node):
+        raise ValueError("import statements are not allowed in API definitions")
+
+    def visit_Attribute(self, node):
+        if node.attr.startswith('__') and node.attr.endswith('__'):
+            raise ValueError(
+                f"dunder attribute access '{node.attr}' is not allowed in API definitions"
+            )
+        self.generic_visit(node)
+
+    def visit_Name(self, node):
+        if node.id in self.FORBIDDEN_NAMES:
+            raise ValueError(
+                f"access to '{node.id}' is not allowed in API definitions"
+            )
+        if node.id.startswith('__') and node.id.endswith('__') and node.id not in self.ALLOWED_DUNDERS:
+            raise ValueError(
+                f"dunder name '{node.id}' is not allowed in API definitions"
+            )
+        self.generic_visit(node)
+
+
+_safety_validator = SafetyValidator()
+
+
+def validate_safety(body_source, iotype, name):
+    """Validate that a body expression contains no dangerous constructs."""
+    body_ast = ast.parse(body_source, f"{iotype}:{name}.safety", "eval")
+    _safety_validator.visit(body_ast)
 
 
 def subv(xbody, iotype, name):
@@ -389,6 +480,7 @@ class APIHandler(object):
         xbody = astor.to_source(self.visitor.start().visit(subv(xbody, iotype, name)))
         print("> ", xbody)
         body = f"lambda {vname}: {xbody}"
+        validate_safety(body, iotype, name)
         compile(body, f"{iotype}:{name}", "eval", dont_inherit=True)
 
         self.ios[iotype][name] = (vname, _type, body, self.visitor.uses)
@@ -493,6 +585,8 @@ class APIHandler(object):
         print(vname, _type, body)
         if env is None:
             env = {}
+        # Restrict builtins to prevent sandbox escapes (e.g. __import__('os').environ)
+        env["__builtins__"] = SAFE_BUILTINS
         if "Image" not in env:
             env["Image"] = Image
         if "global_suppress_exceptions" not in env:
