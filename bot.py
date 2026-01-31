@@ -1194,6 +1194,50 @@ class IstorayjeBot:
     async def handle_possible_index_update(
         self, update: telegram.Update, context: ContextTypes.DEFAULT_TYPE
     ):
+        # implicit group command: treat group messages as queries
+        try:
+            if (
+                update.message
+                and update.message.text
+                and update.message.from_user
+                and update.message.chat.type in ("group", "supergroup")
+                and not update.message.text.startswith("/")
+                and not update.message.text.startswith("set:")
+                and not update.message.text.startswith("^")
+                and not update.message.text.startswith(".ext ")
+            ):
+                implicit_group_cmd = self.resolve_alias(
+                    f"implicit_group${context.bot.username}",
+                    "global",
+                )
+                if not implicit_group_cmd.startswith("implicit_group$"):
+                    query_text = implicit_group_cmd + " " + update.message.text
+                    msg = update.message
+
+                    def do_respond_group(*_):
+                        async def res(inline_query_results, **_):
+                            for result in inline_query_results:
+                                sent = await self.send_inline_result_as_reply(
+                                    context, result, msg.chat.id, msg.message_id
+                                )
+                                if sent:
+                                    return
+
+                        return res
+
+                    await self.handle_query(
+                        (query_text, msg),
+                        context,
+                        respond=do_respond_group,
+                        read=lambda x: x[0],
+                        user=lambda x: x[1].from_user,
+                        skip_implicit=True,
+                    )
+                    return
+                return # Don't proceed to index update handling
+        except Exception:
+            traceback.print_exc()
+
         print("<<<", update)
         reverse = self.context.get("do_reverse", [])
         fuzz = self.context.get("fuzz_reverse", {})
@@ -1320,50 +1364,6 @@ class IstorayjeBot:
                 return
         except:
             pass
-
-        # implicit group command: treat group messages as queries
-        try:
-            if (
-                update.message
-                and update.message.text
-                and update.message.from_user
-                and update.message.chat.type in ("group", "supergroup")
-                and not update.message.text.startswith("/")
-                and not update.message.text.startswith("set:")
-                and not update.message.text.startswith("^")
-                and not update.message.text.startswith(".ext ")
-            ):
-                implicit_group_cmd = self.resolve_alias(
-                    f"implicit_group${context.bot.username}",
-                    update.message.from_user.id,
-                )
-                if not implicit_group_cmd.startswith("implicit_group$"):
-                    query_text = implicit_group_cmd + " " + update.message.text
-                    msg = update.message
-
-                    def do_respond_group(*_):
-                        async def res(inline_query_results, **_):
-                            for result in inline_query_results:
-                                sent = await self.send_inline_result_as_reply(
-                                    context, result, msg.chat.id, msg.message_id
-                                )
-                                if sent:
-                                    return
-
-                        return res
-
-                    await self.handle_query(
-                        (query_text, msg),
-                        context,
-                        respond=do_respond_group,
-                        read=lambda x: x[0],
-                        user=lambda x: x[1].from_user,
-                        skip_implicit=True,
-                    )
-                    return
-                return # Don't proceed to index update handling
-        except Exception:
-            traceback.print_exc()
 
         # probably index update...or stray message
         username = None
@@ -2761,13 +2761,13 @@ class IstorayjeBot:
                 )
                 return
             self.db.db.aliases.find_one_and_update(
-                {"user_id": update.message.from_user.id},
+                {"user_id": "global"},
                 {"$set": {f"aliases.implicit_group${context.bot.username}": args[0]}},
                 upsert=True,
             )
             await update.message.reply_text(
                 f'Added implicit group command "{args[0]}" for bot "{context.bot.username}" (this one)\n'
-                f"Messages you send in groups will be used as queries to this command."
+                f"Messages sent in groups will be used as queries to this command."
             )
             return
         else:
