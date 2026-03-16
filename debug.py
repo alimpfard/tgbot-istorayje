@@ -34,49 +34,49 @@ def _safe_serialize(obj):
         return str(obj)
 
 
+def _getattr_safe(obj, attr):
+    """Get attribute, returning None for missing or DefaultValue sentinels."""
+    v = getattr(obj, attr, None)
+    if v is None:
+        return None
+    # python-telegram-bot uses DefaultValue sentinels for unset fields
+    type_name = type(v).__name__
+    if type_name == "DefaultValue" or type_name == "_DefaultValue":
+        return None
+    return v
+
+
 def _serialize_inline_result(result):
     """Serialize any InlineQueryResult* into a readable dict."""
     if result is None:
         return None
-    from telegram import (
-        InlineQueryResultArticle,
-        InlineQueryResultCachedPhoto,
-        InlineQueryResultCachedGif,
-        InlineQueryResultCachedMpeg4Gif,
-        InlineQueryResultCachedSticker,
-        InlineQueryResultCachedDocument,
-        InlineQueryResultCachedVoice,
-        InlineQueryResultCachedAudio,
-        InlineQueryResultPhoto,
-        InlineQueryResultGif,
-    )
     d = {"_type": type(result).__name__}
     # common fields
     for attr in ("id", "title", "caption", "description"):
-        v = getattr(result, attr, None)
+        v = _getattr_safe(result, attr)
         if v is not None:
             d[attr] = str(v)
     # input_message_content
-    imc = getattr(result, "input_message_content", None)
+    imc = _getattr_safe(result, "input_message_content")
     if imc is not None:
         d["input_message_content"] = {
-            "message_text": getattr(imc, "message_text", None),
-            "parse_mode": getattr(imc, "parse_mode", None),
+            "message_text": _getattr_safe(imc, "message_text"),
+            "parse_mode": _getattr_safe(imc, "parse_mode"),
         }
     # file ids
     for attr in ("photo_file_id", "gif_file_id", "mpeg4_file_id",
                  "sticker_file_id", "document_file_id", "voice_file_id",
                  "audio_file_id"):
-        v = getattr(result, attr, None)
+        v = _getattr_safe(result, attr)
         if v is not None:
             d[attr] = str(v)
     # urls (for non-cached results like InlineQueryResultPhoto)
     for attr in ("photo_url", "thumbnail_url", "gif_url", "mpeg4_url"):
-        v = getattr(result, attr, None)
+        v = _getattr_safe(result, attr)
         if v is not None:
             d[attr] = str(v)
     # reply markup
-    rm = getattr(result, "reply_markup", None)
+    rm = _getattr_safe(result, "reply_markup")
     if rm is not None:
         try:
             buttons = []
@@ -796,6 +796,97 @@ def debug_user():
     return jsonify(result)
 
 
+@debug_bp.route("/debug/externals", methods=["POST"])
+def debug_externals():
+    """List all external sources with their full definitions."""
+    if not _check_auth():
+        return jsonify({"error": "Externals listing requires authentication"}), 403
+
+    handler = _bot.external_api_handler
+
+    apis = {}
+    for name, (comm_type, inp, out, path) in (handler.apis or {}).items():
+        inp_def = handler.input_adapters.get(inp)
+        out_def = handler.output_adapters.get(out)
+        apis[name] = {
+            "comm_type": comm_type,
+            "path_template": path,
+            "input_adapter": {
+                "name": inp,
+                "variable": inp_def[0] if inp_def else None,
+                "type": inp_def[1] if inp_def else None,
+                "body": inp_def[2] if inp_def else None,
+            } if inp_def else {"name": inp, "error": "undefined"},
+            "output_adapter": {
+                "name": out,
+                "variable": out_def[0] if out_def else None,
+                "type": out_def[1] if out_def else None,
+                "body": out_def[2] if out_def else None,
+            } if out_def else {"name": out, "error": "undefined"},
+        }
+
+    # Built-in anilist sub-commands
+    anilist = {
+        "": {
+            "description": "Simple anime/manga search by name",
+            "example_query": "@anilist naruto",
+            "returns": "Page of media results with title, status, genres, description",
+        },
+        "id": {
+            "description": "Look up a specific media by its AniList ID",
+            "example_query": "@anilist:id 20",
+            "returns": "Single media result with full details",
+        },
+        "one": {
+            "description": "Single media query with custom filter expression",
+            "example_query": "@anilist:one search:\"naruto\"",
+            "returns": "Single media result",
+        },
+        "bychar": {
+            "description": "Find anime/manga by character name",
+            "example_query": "@anilist:bychar Goku",
+            "returns": "Media entries featuring the character",
+        },
+        "char": {
+            "description": "Search for character info directly",
+            "example_query": "@anilist:char Rem",
+            "returns": "Character details: name, image, description",
+        },
+        "ql": {
+            "description": "Raw GraphQL query against AniList API",
+            "example_query": "@anilist:ql query { Media(id:1) { title { romaji } } }",
+            "returns": "Raw JSON response",
+        },
+        "aggql": {
+            "description": "GraphQL query + MongoDB aggregation on the result",
+            "example_query": "@anilist:aggql `query { ... }` `[{\"$project\":{...}}]`",
+            "returns": "Aggregated results",
+        },
+    }
+
+    return jsonify({
+        "custom_apis": apis,
+        "anilist_commands": anilist,
+        "input_adapters": {
+            name: {
+                "variable": v[0],
+                "type": v[1],
+                "body": v[2],
+            }
+            for name, v in handler.input_adapters.items()
+        },
+        "output_adapters": {
+            name: {
+                "variable": v[0],
+                "type": v[1],
+                "body": v[2],
+            }
+            for name, v in handler.output_adapters.items()
+        },
+    })
+
+
+
 DEBUG_HTML = r"""<!DOCTYPE html>
 <html>
 <head>
@@ -884,6 +975,7 @@ pre { background: #0d1117; padding: 10px; border-radius: 4px; overflow-x: auto; 
         <button onclick="runStem()">Parse + Stem</button>
         <button onclick="runSearch()">Full Pipeline</button>
         <button onclick="runUser()">User Info</button>
+        <button onclick="runExternals()">Externals</button>
     </div>
     <div id="status"></div>
 </div>
@@ -1247,6 +1339,85 @@ async function runUser() {
         h += stageEl('Last Used Keys', '', r.last_used_keys.map(k => `<span class="tag">${esc(k)}</span>`).join(' '));
     }
 
+    $('output').innerHTML = h;
+}
+
+async function runExternals() {
+    const r = await api('externals', {});
+    if (!r) return;
+    if (r.error) { $('output').innerHTML = `<p class="error">${esc(r.error)}</p>`; return; }
+    let h = '';
+
+    // Anilist built-in commands
+    const ani = r.anilist_commands || {};
+    const aniKeys = Object.keys(ani);
+    if (aniKeys.length) {
+        let inner = aniKeys.map(sub => {
+            const a = ani[sub];
+            const label = sub ? `@anilist:${sub}` : '@anilist';
+            return `<div class="result-card">
+                <span class="result-type">${esc(label)}</span>
+                <p>${esc(a.description)}</p>
+                <p class="result-meta">Example: <code>${esc(a.example_query)}</code></p>
+                <p class="result-meta">Returns: ${esc(a.returns)}</p>
+            </div>`;
+        }).join('');
+        h += stageEl('AniList (built-in)', `${aniKeys.length} sub-commands`, inner);
+    }
+
+    // Custom APIs
+    const apis = r.custom_apis || {};
+    const apiKeys = Object.keys(apis);
+    if (apiKeys.length) {
+        let inner = apiKeys.map(name => {
+            const a = apis[name];
+            const inp = a.input_adapter || {};
+            const out = a.output_adapter || {};
+            return `<div class="result-card">
+                <span class="result-type">@${esc(name)}</span>
+                <div class="io-flow">
+                    <span class="io-box">query</span>
+                    <span class="io-arrow">&rarr;</span>
+                    <span class="io-box">in: ${esc(inp.name||'?')}</span>
+                    <span class="io-arrow">&rarr;</span>
+                    <span class="io-box">${esc(a.comm_type)}</span>
+                    <span class="io-arrow">&rarr;</span>
+                    <span class="io-box">out: ${esc(out.name||'?')}</span>
+                    <span class="io-arrow">&rarr;</span>
+                    <span class="io-box">results</span>
+                </div>
+                <p class="result-meta">Path: <code>${esc(a.path_template)}</code></p>
+                ${inp.body ? `<p class="result-meta">Input body: <code>${esc(inp.body)}</code></p>` : ''}
+                ${out.body ? `<p class="result-meta">Output body: <code>${esc(out.body)}</code></p>` : ''}
+                ${inp.error ? `<p class="error">Input adapter: ${esc(inp.error)}</p>` : ''}
+                ${out.error ? `<p class="error">Output adapter: ${esc(out.error)}</p>` : ''}
+            </div>`;
+        }).join('');
+        h += stageEl('Custom APIs', `${apiKeys.length} defined`, inner);
+    }
+
+    // Standalone IO adapters
+    const inps = r.input_adapters || {};
+    const outs = r.output_adapters || {};
+    if (Object.keys(inps).length || Object.keys(outs).length) {
+        let ioHtml = '<p><b>Input adapters:</b></p>';
+        for (const [name, def] of Object.entries(inps)) {
+            ioHtml += `<div class="cache-entry hit">
+                <p><span class="tag">${esc(name)}</span> (${esc(def.type||'?')})</p>
+                <pre>${esc(def.body||'')}</pre>
+            </div>`;
+        }
+        ioHtml += '<p><b>Output adapters:</b></p>';
+        for (const [name, def] of Object.entries(outs)) {
+            ioHtml += `<div class="cache-entry hit">
+                <p><span class="tag">${esc(name)}</span> (${esc(def.type||'?')})</p>
+                <pre>${esc(def.body||'')}</pre>
+            </div>`;
+        }
+        h += stageEl('IO Adapters', `${Object.keys(inps).length} in / ${Object.keys(outs).length} out`, ioHtml, false);
+    }
+
+    if (!h) h = '<p>No external sources defined.</p>';
     $('output').innerHTML = h;
 }
 
