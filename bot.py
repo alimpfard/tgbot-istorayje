@@ -61,6 +61,7 @@ from nltk.corpus import wordnet as wn
 from nltk.stem import PorterStemmer
 from bson.json_util import dumps
 from apihandler import APIHandler
+from debug import debug_bp, register_debug
 
 from typing import Awaitable, Callable, Optional, Coroutine
 from type import T
@@ -205,8 +206,8 @@ class IstorayjeBot:
             loop.add_signal_handler(sig, self.primary_app._raise_system_exit)
 
         APP_URL = os.environ.get("APP_URL")
+        PORT = int(os.environ.get("PORT", "8443"))
         if APP_URL is not None:
-            PORT = int(os.environ.get("PORT", "8443"))
             print(
                 f"Warning: APP_URL is set, but starting in polling mode. If you want to use webhooks, set MODE=prod and run in production mode. Current APP_URL: {APP_URL}, PORT: {PORT}"
             )
@@ -241,11 +242,23 @@ class IstorayjeBot:
                 response.content_type = "image/jpg"
                 return response
 
+            register_debug(self)
+            app.register_blueprint(debug_bp)
+
             threading.Thread(
                 target=lambda: app.run(
                     host="0.0.0.0",
                     port=PORT,
                 )
+            ).start()
+        else:
+            # No APP_URL, but still start Flask for debug page
+            dapp = Flask(__name__)
+            register_debug(self)
+            dapp.register_blueprint(debug_bp)
+            threading.Thread(
+                target=lambda: dapp.run(host="0.0.0.0", port=PORT),
+                daemon=True,
             ).start()
 
         try:
@@ -342,6 +355,9 @@ class IstorayjeBot:
                     )
 
             return jsonify({"error": "Invalid token"}), 404
+
+        register_debug(self)
+        app.register_blueprint(debug_bp)
 
         threading.Thread(
             target=lambda: app.run(
