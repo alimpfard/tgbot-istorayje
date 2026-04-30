@@ -17,7 +17,7 @@ from telegram import (
 from telegram.constants import ParseMode
 from uuid import uuid4, UUID
 import urllib.parse
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 
 from html.parser import HTMLParser
 from lxml import html as xhtml
@@ -28,6 +28,7 @@ from type import checked_as
 import xxhash
 import base64
 import io
+import textwrap
 
 
 VAR_STORE = {}
@@ -200,6 +201,65 @@ class InternalPhoto:
         self.thumb_url = thumb_url or url
 
 
+def render_text_card(text, bg, fg, size=512, padding=32):
+    text = str(text) if text is not None else ''
+    image = Image.new('RGB', (size, size), bg)
+    draw = ImageDraw.Draw(image)
+    max_width = size - 2 * padding
+    max_height = size - 2 * padding
+
+    def wrap(font):
+        # estimate chars-per-line from a representative glyph width
+        sample = draw.textlength('abcdefghijklmnopqrstuvwxyz', font=font) / 26 or 1
+        cols = max(1, int(max_width / sample))
+        lines = []
+        for paragraph in text.split('\n'):
+            if not paragraph:
+                lines.append('')
+                continue
+            lines.extend(textwrap.wrap(
+                paragraph, width=cols,
+                break_long_words=True, break_on_hyphens=True,
+                replace_whitespace=False, drop_whitespace=True,
+            ) or [''])
+        return lines
+
+    def measure(font, lines):
+        ascent, descent = font.getmetrics()
+        line_height = ascent + descent
+        widest = max((draw.textlength(line, font=font) for line in lines), default=0)
+        return widest, line_height * len(lines), line_height
+
+    lo, hi, best = 8, 200, None
+    while lo <= hi:
+        mid = (lo + hi) // 2
+        font = ImageFont.load_default(size=mid)
+        lines = wrap(font)
+        width, height, line_height = measure(font, lines)
+        if width <= max_width and height <= max_height:
+            best = (font, lines, line_height)
+            lo = mid + 1
+        else:
+            hi = mid - 1
+
+    if best is None:
+        font = ImageFont.load_default(size=8)
+        lines = wrap(font)
+        _, _, line_height = measure(font, lines)
+    else:
+        font, lines, line_height = best
+
+    total_height = line_height * len(lines)
+    y = (size - total_height) // 2
+    for line in lines:
+        line_width = draw.textlength(line, font=font)
+        x = (size - line_width) // 2
+        draw.text((x, y), line, font=font, fill=fg)
+        y += line_height
+
+    return image
+
+
 def construct_image(obj):
     if isinstance(obj, str):
         if obj.startswith("data:image/"):
@@ -214,6 +274,8 @@ def construct_image(obj):
             return image
         return InternalPhoto(obj)
     if isinstance(obj, dict):
+        if 'text' in obj:
+            return render_text_card(obj['text'], obj.get('bg', '#000000'), obj.get('fg', '#ffffff'))
         return InternalPhoto(**obj)
     raise Exception("Invalid kind for @image " + str(type(obj)))
 
