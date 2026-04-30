@@ -282,7 +282,7 @@ def render_text_card(text, bg, fg, size=512, padding=32):
     return image
 
 
-def proxy_image_url(url):
+def proxy_image_url(url, headers=None):
     if not isinstance(url, str):
         return url
     if not (url.startswith("http://") or url.startswith("https://")):
@@ -294,7 +294,8 @@ def proxy_image_url(url):
     if url.startswith(base + "/proxy-url/"):
         return url
     encoded = urllib.parse.quote(url, safe='')
-    return f"{base}/proxy-url/original/{proxy_sign(encoded)}/{encoded}"
+    hdr = '/' + urllib.parse.quote(json.dumps(headers), safe='') if headers else ''
+    return f"{base}/proxy-url/original/{proxy_sign(encoded)}/{encoded}{hdr}"
 
 
 def construct_image(obj):
@@ -314,10 +315,14 @@ def construct_image(obj):
         if 'text' in obj:
             return render_text_card(obj['text'], obj.get('bg', '#000000'), obj.get('fg', '#ffffff'))
         kwargs = dict(obj)
+        headers = None
+        if 'headers' in kwargs:
+            headers = kwargs['headers']
+            del kwargs['headers']
         if 'url' in kwargs:
-            kwargs['url'] = proxy_image_url(kwargs['url'])
+            kwargs['url'] = proxy_image_url(kwargs['url'], headers)
         if kwargs.get('thumb_url'):
-            kwargs['thumb_url'] = proxy_image_url(kwargs['thumb_url'])
+            kwargs['thumb_url'] = kwargs['thumb_url']
         return InternalPhoto(**kwargs)
     raise Exception("Invalid kind for @image " + str(type(obj)))
 

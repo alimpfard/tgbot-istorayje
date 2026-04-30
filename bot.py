@@ -59,6 +59,20 @@ from apihandler import proxy_verify, PROXY_BROWSER_UA
 def _register_url_proxy(app):
     @app.route("/proxy-url/original/<sig>/<path:encoded>", methods=["GET"])
     def proxy_url_original(sig, encoded):
+        # The path may end with a JSON headers object appended by
+        # proxy_image_url().  Flask fully decodes <path:>, so the URL
+        # has real slashes — split on the last "/{" to find the JSON.
+        extra_headers = {}
+        sep = encoded.rfind('/{')
+        if sep != -1:
+            json_part = encoded[sep + 1:]
+            try:
+                import json as _json
+                extra_headers = _json.loads(json_part)
+                encoded = encoded[:sep]
+            except Exception:
+                pass
+
         # Flask URL-decoded `encoded` once; re-encode to match what was signed.
         re_encoded = _urlparse.quote(encoded, safe='')
         if request.query_string:
@@ -70,13 +84,15 @@ def _register_url_proxy(app):
         url = _urlparse.unquote(re_encoded)
         if not (url.startswith("http://") or url.startswith("https://")):
             return make_response("invalid url", 400)
+        req_headers = {"User-Agent": PROXY_BROWSER_UA}
+        req_headers.update(extra_headers)
         try:
             upstream = _requests.get(
                 url,
                 stream=True,
                 timeout=30,
                 allow_redirects=True,
-                headers={"User-Agent": PROXY_BROWSER_UA},
+                headers=req_headers,
             )
         except Exception as e:
             return make_response(f"proxy error: {e}", 502)

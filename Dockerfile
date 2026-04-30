@@ -5,7 +5,6 @@ RUN apt install libcurl4-openssl-dev
 
 RUN mkdir /app
 COPY Pipfile* /app/
-COPY *.py /app/
 COPY *.txt /app/
 
 WORKDIR /app
@@ -13,6 +12,9 @@ WORKDIR /app
 RUN pip install --upgrade pip
 RUN pip install -r requirements.txt
 
-RUN python -c "import nltk; nltk.download('stopwords')"
+COPY nltk_data/ /root/nltk_data/
+RUN if [ -z "$(ls -A /root/nltk_data)" ]; then rm -rf /root/nltk_data && python -c "import nltk; nltk.download('stopwords'); nltk.download('wordnet')"; fi
+
+COPY *.py /app/
 
 ENTRYPOINT ["python", "main.py"]
