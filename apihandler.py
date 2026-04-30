@@ -29,6 +29,28 @@ import xxhash
 import base64
 import io
 import textwrap
+import hmac
+import hashlib
+import secrets as _secrets
+
+
+PROXY_SECRET = environ.get("PROXY_SECRET") or _secrets.token_hex(32)
+PROXY_BROWSER_UA = (
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+)
+
+
+def proxy_sign(encoded_url):
+    return hmac.new(
+        PROXY_SECRET.encode(), encoded_url.encode(), hashlib.sha256
+    ).hexdigest()[:32]
+
+
+def proxy_verify(encoded_url, sig):
+    if not sig or len(sig) != 32:
+        return False
+    return hmac.compare_digest(proxy_sign(encoded_url), sig)
 
 
 VAR_STORE = {}
@@ -260,6 +282,21 @@ def render_text_card(text, bg, fg, size=512, padding=32):
     return image
 
 
+def proxy_image_url(url):
+    if not isinstance(url, str):
+        return url
+    if not (url.startswith("http://") or url.startswith("https://")):
+        return url
+    app_url = environ.get("APP_URL")
+    if not app_url:
+        return url
+    base = app_url.rstrip('/')
+    if url.startswith(base + "/proxy-url/"):
+        return url
+    encoded = urllib.parse.quote(url, safe='')
+    return f"{base}/proxy-url/original/{proxy_sign(encoded)}/{encoded}"
+
+
 def construct_image(obj):
     if isinstance(obj, str):
         if obj.startswith("data:image/"):
@@ -272,11 +309,16 @@ def construct_image(obj):
             # Create a PIL Image from the decoded data
             image = Image.open(io.BytesIO(image_data))
             return image
-        return InternalPhoto(obj)
+        return InternalPhoto(proxy_image_url(obj))
     if isinstance(obj, dict):
         if 'text' in obj:
             return render_text_card(obj['text'], obj.get('bg', '#000000'), obj.get('fg', '#ffffff'))
-        return InternalPhoto(**obj)
+        kwargs = dict(obj)
+        if 'url' in kwargs:
+            kwargs['url'] = proxy_image_url(kwargs['url'])
+        if kwargs.get('thumb_url'):
+            kwargs['thumb_url'] = proxy_image_url(kwargs['thumb_url'])
+        return InternalPhoto(**kwargs)
     raise Exception("Invalid kind for @image " + str(type(obj)))
 
 

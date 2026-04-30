@@ -51,6 +51,44 @@ from uuid import uuid4, UUID
 import traceback
 import json
 import xxhash
+import requests as _requests
+import urllib.parse as _urlparse
+from apihandler import proxy_verify, PROXY_BROWSER_UA
+
+
+def _register_url_proxy(app):
+    @app.route("/proxy-url/original/<sig>/<path:encoded>", methods=["GET"])
+    def proxy_url_original(sig, encoded):
+        # Flask URL-decoded `encoded` once; re-encode to match what was signed.
+        re_encoded = _urlparse.quote(encoded, safe='')
+        if request.query_string:
+            re_encoded = re_encoded + _urlparse.quote(
+                "?" + request.query_string.decode("latin-1"), safe=''
+            )
+        if not proxy_verify(re_encoded, sig):
+            return make_response("bad signature", 403)
+        url = _urlparse.unquote(re_encoded)
+        if not (url.startswith("http://") or url.startswith("https://")):
+            return make_response("invalid url", 400)
+        try:
+            upstream = _requests.get(
+                url,
+                stream=True,
+                timeout=30,
+                allow_redirects=True,
+                headers={"User-Agent": PROXY_BROWSER_UA},
+            )
+        except Exception as e:
+            return make_response(f"proxy error: {e}", 502)
+        body = upstream.content
+        response = make_response(body, upstream.status_code)
+        ct = upstream.headers.get("Content-Type")
+        if ct:
+            response.content_type = ct
+        cl = upstream.headers.get("Content-Length")
+        if cl:
+            response.headers["Content-Length"] = cl
+        return response
 import dill as pickle
 from threading import Event
 from time import time
@@ -237,11 +275,14 @@ class IstorayjeBot:
 
                 io = BytesIO()
 
-                _self.cached_images[hash].resize(size=(128, 128)).save(io, format="JPEG")
+                _self.cached_images[hash].resize(size=(128, 128)).save(
+                    io, format="JPEG"
+                )
                 response = make_response(io.getvalue())
                 response.content_type = "image/jpg"
                 return response
 
+            _register_url_proxy(app)
             register_debug(self)
             app.register_blueprint(debug_bp)
 
@@ -335,6 +376,8 @@ class IstorayjeBot:
             response = make_response(io.getvalue())
             response.content_type = "image/jpg"
             return response
+
+        _register_url_proxy(app)
 
         @app.route("/<path:token>", methods=["POST"])
         def webhook(token):
@@ -2066,7 +2109,9 @@ class IstorayjeBot:
         chat_data=None,
         respond: Callable[
             [T], Callable[..., Awaitable]
-        ] = lambda x: x.inline_query.answer,  # type: ignore
+        ] = lambda x: lambda *args, **kwargs: x.inline_query.answer(
+            *args, **(kwargs | {"auto_pagination": True})
+        ),  # type: ignore
         read: Callable[[T], str] = lambda x: x.inline_query.query,  # type: ignore
         user: Callable[
             [T], Optional[telegram.User]
@@ -2239,7 +2284,7 @@ class IstorayjeBot:
         context: ContextTypes.DEFAULT_TYPE,
         user_data=None,
         chat_data=None,
-        respond: Callable[[T], Callable[..., Awaitable]] = lambda x: x.inline_query.answer,  # type: ignore
+        respond: Callable[[T], Callable[..., Awaitable]] = lambda x: lambda *args, **kwargs: x.inline_query.answer(*args, **(kwargs | {"auto_pagination": True})),  # type: ignore
         read: Callable[[T], str] = lambda x: x.inline_query.query,  # type: ignore
         user: Callable[[T], Optional[telegram.User]] = lambda x: x.inline_query.from_user,  # type: ignore
         skip_implicit=False,
