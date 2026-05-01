@@ -347,9 +347,7 @@ def from_json(x):
 
 class MLStripper(HTMLParser):
     def __init__(self):
-        self.reset()
-        self.strict = False
-        self.convert_charrefs = True
+        super().__init__(convert_charrefs=True)
         self.fed = []
 
     def handle_data(self, data):
