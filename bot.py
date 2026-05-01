@@ -110,9 +110,26 @@ from threading import Event
 from time import time
 import random
 from datetime import timedelta
-from nltk.corpus import stopwords
-from nltk.corpus import wordnet as wn
-from nltk.stem import PorterStemmer
+# nltk corpora and PorterStemmer are loaded lazily via _nltk() — wordnet alone
+# is ~30MB resident and is only needed by the :synonyms magic.
+_nltk_cache = {}
+
+
+def _nltk(part):
+    if part in _nltk_cache:
+        return _nltk_cache[part]
+    if part == "stopwords":
+        from nltk.corpus import stopwords as _sw
+        _nltk_cache[part] = set(_sw.words("english"))
+    elif part == "wordnet":
+        from nltk.corpus import wordnet as _wn
+        _nltk_cache[part] = _wn
+    elif part == "stemmer":
+        from nltk.stem import PorterStemmer as _ps
+        _nltk_cache[part] = _ps()
+    else:
+        raise KeyError(part)
+    return _nltk_cache[part]
 from bson.json_util import dumps
 from apihandler import APIHandler
 from debug import debug_bp, register_debug
@@ -134,8 +151,6 @@ def get_any(obj, lst):
 
 class IstorayjeBot:
     def __init__(self, tokens: list[str], db: DB, dev=False):
-        self.stemmer = PorterStemmer()
-        self.stopwordset = stopwords.words("english")
         self.random = random.Random()
         self.tokens = tokens
         self.apps = [ApplicationBuilder().token(token).build() for token in tokens]
@@ -270,31 +285,24 @@ class IstorayjeBot:
             @app.route("/image/<hash>", methods=["GET"])
             def proxy_image(hash):
                 _self = self.external_api_handler
-                if hash not in _self.cached_images:
+                entry = _self.cached_images.get(hash)
+                if entry is None:
                     response = make_response("Nothing here mate")
                     response.status_code = 404
                     return response
-
-                io = BytesIO()
-                _self.cached_images[hash].save(io, format="JPEG")
-                response = make_response(io.getvalue())
+                response = make_response(entry[0])
                 response.content_type = "image/jpg"
                 return response
 
             @app.route("/thumb/<hash>", methods=["GET"])
             def proxy_thumb(hash):
                 _self = self.external_api_handler
-                if hash not in _self.cached_images:
+                entry = _self.cached_images.get(hash)
+                if entry is None:
                     response = make_response("Nothing here mate")
                     response.status_code = 404
                     return response
-
-                io = BytesIO()
-
-                _self.cached_images[hash].resize(size=(128, 128)).save(
-                    io, format="JPEG"
-                )
-                response = make_response(io.getvalue())
+                response = make_response(entry[1])
                 response.content_type = "image/jpg"
                 return response
 
@@ -367,29 +375,24 @@ class IstorayjeBot:
         @app.route("/image/<hash>", methods=["GET"])
         def proxy_image(hash):
             _self = self.external_api_handler
-            if hash not in _self.cached_images:
+            entry = _self.cached_images.get(hash)
+            if entry is None:
                 response = make_response("Nothing here mate")
                 response.status_code = 404
                 return response
-
-            io = BytesIO()
-            _self.cached_images[hash].save(io, format="JPEG")
-            response = make_response(io.getvalue())
+            response = make_response(entry[0])
             response.content_type = "image/jpg"
             return response
 
         @app.route("/thumb/<hash>", methods=["GET"])
         def proxy_thumb(hash):
             _self = self.external_api_handler
-            if hash not in _self.cached_images:
+            entry = _self.cached_images.get(hash)
+            if entry is None:
                 response = make_response("Nothing here mate")
                 response.status_code = 404
                 return response
-
-            io = BytesIO()
-
-            _self.cached_images[hash].resize(size=(128, 128)).save(io, format="JPEG")
-            response = make_response(io.getvalue())
+            response = make_response(entry[1])
             response.content_type = "image/jpg"
             return response
 
@@ -1072,6 +1075,7 @@ class IstorayjeBot:
                                 pass
                     else:
                         words.append(arg)
+                wn = _nltk("wordnet")
                 synsets = set(sum((wn.synsets(word) for word in words), []))
                 for depth in range(options["hypernym-depth"]):
                     synsets.update([hyp for syn in synsets for hyp in syn.hypernyms()])
@@ -2086,11 +2090,12 @@ class IstorayjeBot:
     def process_search_query_further(self, query: list):
         qq = query[:]
         qs = set(tuple(x) for x in query)
-        sw = self.stopwordset
+        sw = _nltk("stopwords")
+        stemmer = _nltk("stemmer")
         for terms in query:
             tts = [[]]
             for term in terms:
-                pt = self.stemmer.stem(term)
+                pt = stemmer.stem(term)
                 if pt != term:
                     for tt in tts[:]:  # ouch
                         if term not in sw and pt not in sw:

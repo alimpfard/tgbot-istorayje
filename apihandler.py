@@ -534,7 +534,9 @@ class APIHandler(object):
             r"(?!\\)\#page\[(\w+)\]\((.*)\)"
         )  # #page[var](...#var...)
         self.page_var_re = lambda var: re.compile(rf"(?!\\)\#{var}\b")  # #var
-        self.cached_images: dict[str, Image.Image] = {}
+        self.cached_images: dict[str, tuple[bytes, bytes]] = {}
+        self.cached_images_size = 0
+        self.CACHED_IMAGES_BUDGET = 8 * 1024 * 1024
 
     def flush(self):
         self.bot.db.db.external_apis.update_one(
@@ -632,33 +634,45 @@ class APIHandler(object):
                     reply_markup=reply_markup,
                 )
             if isinstance(x, Image.Image):
-                hash = xxhash.xxh64(x.tobytes()).digest().hex()
+                buf = io.BytesIO()
+                x.save(buf, format="JPEG")
+                full_bytes = buf.getvalue()
+                hash = xxhash.xxh64(full_bytes).digest().hex()
+
+                thumb = x.copy()
+                thumb.thumbnail((128, 128))
+                tbuf = io.BytesIO()
+                thumb.save(tbuf, format="JPEG")
+                thumb_bytes = tbuf.getvalue()
+                thumb.close()
+
+                width, height = x.width, x.height
+                x.close()
+
+                entry_size = len(full_bytes) + len(thumb_bytes)
+                while (
+                    self.cached_images_size + entry_size > self.CACHED_IMAGES_BUDGET
+                    and self.cached_images
+                ):
+                    old_k, (old_f, old_t) = next(iter(self.cached_images.items()))
+                    self.cached_images_size -= len(old_f) + len(old_t)
+                    del self.cached_images[old_k]
+
+                self.cached_images[hash] = (full_bytes, thumb_bytes)
+                self.cached_images_size += entry_size
+
                 url = f"{environ.get('APP_URL')}/image/{hash}"
                 thumb_url = f"{environ.get('APP_URL')}/thumb/{hash}"
-
-                size = 0
-                for key in self.cached_images:
-                    size += len(self.cached_images[key].tobytes())
-                if size > 32 * 1024 * 1024:
-                    to_delete = size - 32 * 1024 * 1024
-                    while to_delete > 0 and len(self.cached_images) != 0:
-                        k = next(iter(self.cached_images))
-                        to_delete -= len(self.cached_images[k].tobytes())
-                        del self.cached_images[k]
-
-                self.cached_images[hash] = x
-
-                res = InlineQueryResultPhoto(
+                return InlineQueryResultPhoto(
                     id=str(uuid),
                     title=f"result {k}",
                     photo_url=url,
                     thumbnail_url=thumb_url,
-                    photo_height=x.height,
-                    photo_width=x.width,
+                    photo_height=height,
+                    photo_width=width,
                     caption=k,
                     reply_markup=reply_markup,
                 )
-                return res
             return InlineQueryResultArticle(
                 id=str(uuid),
                 title=f"{k} - Unknown result type",
