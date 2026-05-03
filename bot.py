@@ -132,7 +132,6 @@ def _nltk(part):
     return _nltk_cache[part]
 from bson.json_util import dumps
 from apihandler import APIHandler
-from debug import debug_bp, register_debug
 
 from typing import Awaitable, Callable, Optional, Coroutine
 from type import T
@@ -307,6 +306,7 @@ class IstorayjeBot:
                 return response
 
             _register_url_proxy(app)
+            from debug import debug_bp, register_debug
             register_debug(self)
             app.register_blueprint(debug_bp)
 
@@ -319,6 +319,7 @@ class IstorayjeBot:
         else:
             # No APP_URL, but still start Flask for debug page
             dapp = Flask(__name__)
+            from debug import debug_bp, register_debug
             register_debug(self)
             dapp.register_blueprint(debug_bp)
             threading.Thread(
@@ -418,6 +419,7 @@ class IstorayjeBot:
 
             return jsonify({"error": "Invalid token"}), 404
 
+        from debug import debug_bp, register_debug
         register_debug(self)
         app.register_blueprint(debug_bp)
 
@@ -908,6 +910,9 @@ class IstorayjeBot:
                 ),
                 timedelta(seconds=5),
             )  # todo: based on load
+
+        from apihandler import release_memory
+        release_memory()
 
     def sample(self, iterator, k):
         result = [next(iterator) for _ in range(k)]

@@ -10,6 +10,8 @@ processes = []
 
 [env]
   PORT = "8080"
+  MALLOC_ARENA_MAX = "2"
+  MALLOC_TRIM_THRESHOLD_ = "131072"
 
 [experimental]
   allowed_public_ports = []

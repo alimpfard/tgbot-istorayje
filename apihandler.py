@@ -32,6 +32,27 @@ import textwrap
 import hmac
 import hashlib
 import secrets as _secrets
+import gc as _gc
+import ctypes as _ctypes
+import ctypes.util as _ctypes_util
+
+Image.MAX_IMAGE_PIXELS = 24_000_000
+
+try:
+    _libc = _ctypes.CDLL(_ctypes_util.find_library("c") or "libc.so.6")
+    _libc.malloc_trim.argtypes = [_ctypes.c_size_t]
+    _libc.malloc_trim.restype = _ctypes.c_int
+except (OSError, AttributeError):
+    _libc = None
+
+
+def release_memory():
+    _gc.collect()
+    if _libc is not None:
+        try:
+            _libc.malloc_trim(0)
+        except Exception:
+            pass
 
 
 PROXY_SECRET = environ.get("PROXY_SECRET") or _secrets.token_hex(32)
@@ -534,7 +555,7 @@ class APIHandler(object):
         self.page_var_re = lambda var: re.compile(rf"(?!\\)\#{var}\b")  # #var
         self.cached_images: dict[str, tuple[bytes, bytes]] = {}
         self.cached_images_size = 0
-        self.CACHED_IMAGES_BUDGET = 8 * 1024 * 1024
+        self.CACHED_IMAGES_BUDGET = 4 * 1024 * 1024
 
     def flush(self):
         self.bot.db.db.external_apis.update_one(
@@ -648,6 +669,7 @@ class APIHandler(object):
                 x.close()
 
                 entry_size = len(full_bytes) + len(thumb_bytes)
+                evicted = False
                 while (
                     self.cached_images_size + entry_size > self.CACHED_IMAGES_BUDGET
                     and self.cached_images
@@ -655,9 +677,12 @@ class APIHandler(object):
                     old_k, (old_f, old_t) = next(iter(self.cached_images.items()))
                     self.cached_images_size -= len(old_f) + len(old_t)
                     del self.cached_images[old_k]
+                    evicted = True
 
                 self.cached_images[hash] = (full_bytes, thumb_bytes)
                 self.cached_images_size += entry_size
+                if evicted:
+                    release_memory()
 
                 url = f"{environ.get('APP_URL')}/image/{hash}"
                 thumb_url = f"{environ.get('APP_URL')}/thumb/{hash}"
