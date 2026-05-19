@@ -162,10 +162,12 @@ def debug_stem():
     if authed:
         expanded = _bot.process_search_query_further(qstack) if qstack else []
         result["expanded_terms"] = expanded
+        from bot import _nltk
+        stemmer = _nltk("stemmer")
         stems = {}
         for terms in qstack:
             for term in terms:
-                stems[term] = _bot.stemmer.stem(term)
+                stems[term] = stemmer.stem(term)
         result["individual_stems"] = stems
     else:
         result["note"] = "Provide password for expanded stemming details"

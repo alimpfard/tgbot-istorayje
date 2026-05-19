@@ -1,0 +1,4 @@
+flask>=3.0
+gunicorn>=21
+nltk>=3.9
+requests>=2.32

@@ -747,26 +747,38 @@ class IstorayjeBot:
                     instags.push("nsfw")
 
             elif doc["service"] == "gifop":
-                res = process_gifops(
-                    url=(await context.bot.get_file(doc["fileid"]))._get_encoded_url(),
-                    ops={
-                        x: doc[x]
-                        for x in [
-                            "reverse",
-                            "speed",
-                            "skip",
-                            "early",
-                            "append",
-                            "animate",
-                        ]
-                        if x in doc
-                    },
-                    format=doc["format"],
-                )
                 resp = doc["response_id"]
-                if res == b"":
+                ops = {
+                    x: doc[x]
+                    for x in [
+                        "reverse",
+                        "speed",
+                        "skip",
+                        "early",
+                        "append",
+                        "animate",
+                    ]
+                    if x in doc
+                }
+                print("gifop", doc["fileid"], ops, doc.get("format"))
+                try:
+                    file = await context.bot.get_file(doc["fileid"])
+                    res = process_gifops(
+                        url=file._get_encoded_url(),
+                        ops=ops,
+                        format=doc["format"],
+                    )
+                except Exception as e:
+                    traceback.print_exc()
                     await context.bot.edit_message_text(
-                        f"Failed: operation failed",
+                        f"Failed: gifop request errored: {e}",
+                        chat_id=resp[1],
+                        message_id=resp[0],
+                    )
+                    continue
+                if not res:
+                    await context.bot.edit_message_text(
+                        f"Failed: operation failed (empty response from gifop service)",
                         chat_id=resp[1],
                         message_id=resp[0],
                     )

@@ -25,6 +25,9 @@ def process_gifops(url: str, ops: dict, format: str):
     res = requests.post(
         PKE_TAGIFY_URL + "/gifop", json={"url": url, "ops": ops, "format": format}
     )
+    if not res.ok:
+        print(f"gifop service returned {res.status_code}: {res.content[:200]!r}")
+        return b""
     return res.content
 
 
