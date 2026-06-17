@@ -53,10 +53,51 @@ import json
 import xxhash
 import requests as _requests
 import urllib.parse as _urlparse
-from apihandler import proxy_verify, PROXY_BROWSER_UA
+from flask import redirect
+import s3store
+from apihandler import (
+    proxy_verify,
+    PROXY_BROWSER_UA,
+    proxy_image_url,
+    s3_presign_source,
+)
 
 
 def _register_url_proxy(app):
+    @app.route("/s3img/u/<sig>/<path:encoded>", methods=["GET"])
+    def s3img_from_source(sig, encoded):
+        extra_headers = {}
+        sep = encoded.rfind('/{')
+        if sep != -1:
+            try:
+                import json as _json
+                extra_headers = _json.loads(encoded[sep + 1:])
+                encoded = encoded[:sep]
+            except Exception:
+                pass
+        re_encoded = _urlparse.quote(encoded, safe='')
+        if not proxy_verify(re_encoded, sig):
+            return make_response("bad signature", 403)
+        url = _urlparse.unquote(re_encoded)
+        if not (url.startswith("http://") or url.startswith("https://")):
+            return make_response("invalid url", 400)
+        try:
+            return redirect(s3_presign_source(url, extra_headers or None), code=302)
+        except Exception as e:
+            print("s3img upload failed, proxying:", e)
+            return redirect(proxy_image_url(url, extra_headers or None), code=302)
+
+    @app.route("/s3img/k/<sig>/<path:encoded>", methods=["GET"])
+    def s3img_from_key(sig, encoded):
+        re_encoded = _urlparse.quote(encoded, safe='')
+        if not proxy_verify(re_encoded, sig):
+            return make_response("bad signature", 403)
+        key = _urlparse.unquote(re_encoded)
+        try:
+            return redirect(s3store.presigned_get_url(key, expires=900), code=302)
+        except Exception as e:
+            return make_response(f"presign error: {e}", 502)
+
     @app.route("/proxy-url/original/<sig>/<path:encoded>", methods=["GET"])
     def proxy_url_original(sig, encoded):
         # The path may end with a JSON headers object appended by
@@ -281,30 +322,6 @@ class IstorayjeBot:
             )
             app = Flask(__name__)
 
-            @app.route("/image/<hash>", methods=["GET"])
-            def proxy_image(hash):
-                _self = self.external_api_handler
-                entry = _self.cached_images.get(hash)
-                if entry is None:
-                    response = make_response("Nothing here mate")
-                    response.status_code = 404
-                    return response
-                response = make_response(entry[0])
-                response.content_type = "image/jpg"
-                return response
-
-            @app.route("/thumb/<hash>", methods=["GET"])
-            def proxy_thumb(hash):
-                _self = self.external_api_handler
-                entry = _self.cached_images.get(hash)
-                if entry is None:
-                    response = make_response("Nothing here mate")
-                    response.status_code = 404
-                    return response
-                response = make_response(entry[1])
-                response.content_type = "image/jpg"
-                return response
-
             _register_url_proxy(app)
             from debug import debug_bp, register_debug
             register_debug(self)
@@ -372,30 +389,6 @@ class IstorayjeBot:
         import logging
 
         app = Flask(__name__)
-
-        @app.route("/image/<hash>", methods=["GET"])
-        def proxy_image(hash):
-            _self = self.external_api_handler
-            entry = _self.cached_images.get(hash)
-            if entry is None:
-                response = make_response("Nothing here mate")
-                response.status_code = 404
-                return response
-            response = make_response(entry[0])
-            response.content_type = "image/jpg"
-            return response
-
-        @app.route("/thumb/<hash>", methods=["GET"])
-        def proxy_thumb(hash):
-            _self = self.external_api_handler
-            entry = _self.cached_images.get(hash)
-            if entry is None:
-                response = make_response("Nothing here mate")
-                response.status_code = 404
-                return response
-            response = make_response(entry[1])
-            response.content_type = "image/jpg"
-            return response
 
         _register_url_proxy(app)
 
@@ -2219,8 +2212,11 @@ class IstorayjeBot:
                     )
             elif self.has_api(user(update).id, coll):
                 try:
-                    res = self.invoke(coll, ireqs, query, extra)
-                    await respond(update)(self.render_api(coll, ireqs, res, extra))
+                    # Run on a separate thread to avoid blocking the event loop.
+                    def invoke_and_render():
+                        res = self.invoke(coll, ireqs, query, extra)
+                        return self.render_api(coll, ireqs, res, extra)
+                    await respond(update)(await asyncio.to_thread(invoke_and_render))
                 except Exception as e:
                     raise Exception(f"Invalid API invocation: {e}")
             else:

@@ -22,13 +22,16 @@ from PIL import Image, ImageDraw, ImageFont
 from html.parser import HTMLParser
 from lxml import html as xhtml
 from flask import Flask, request, make_response
-from threading import Thread
+from threading import Thread, Lock
+from concurrent.futures import ThreadPoolExecutor
 from type import checked_as
 
+import s3store
 import xxhash
 import base64
 import io
 import textwrap
+import time as _time
 import hmac
 import hashlib
 import secrets as _secrets
@@ -241,7 +244,7 @@ class InternalPhoto:
     def __init__(self, url, thumb_url=None, caption=None):
         self.url = url
         self.caption = caption
-        self.thumb_url = thumb_url or url
+        self.thumb_url = thumb_url if thumb_url is not None else url
 
 
 def render_text_card(text, bg, fg, size=512, padding=32):
@@ -319,6 +322,99 @@ def proxy_image_url(url, headers=None):
     return f"{base}/proxy-url/original/{proxy_sign(encoded)}/{encoded}{hdr}"
 
 
+_S3_IMG_CACHE: dict[str, tuple[str, float]] = {}
+_S3_REUPLOAD_AFTER = 90 * 60
+_S3_CACHE_CAP = 1024
+_S3_CT_EXT = {
+    "image/jpeg": ".jpg",
+    "image/png": ".png",
+    "image/gif": ".gif",
+    "image/webp": ".webp",
+}
+
+
+_S3_EXECUTOR = ThreadPoolExecutor(max_workers=8, thread_name_prefix="s3img")
+_S3_CACHE_LOCK = Lock()
+
+
+def _s3_remember(url, key, now):
+    with _S3_CACHE_LOCK:
+        if len(_S3_IMG_CACHE) >= _S3_CACHE_CAP:
+            _S3_IMG_CACHE.pop(next(iter(_S3_IMG_CACHE)), None)
+        _S3_IMG_CACHE[url] = (key, now)
+
+
+def _s3_cached_key(url):
+    now = _time.monotonic()
+    with _S3_CACHE_LOCK:
+        ent = _S3_IMG_CACHE.get(url)
+        if ent and now - ent[1] < _S3_REUPLOAD_AFTER:
+            return ent[0]
+    return None
+
+
+def s3_stream_store(url, headers=None):
+    cached = _s3_cached_key(url)
+    if cached:
+        return cached
+    req_headers = {"User-Agent": PROXY_BROWSER_UA}
+    if headers:
+        req_headers.update(headers)
+    resp = requests.get(
+        url, headers=req_headers, stream=True, timeout=30, allow_redirects=True
+    )
+    try:
+        resp.raise_for_status()
+        ct = (resp.headers.get("Content-Type") or "").split(";")[0].strip()
+        ct = ct or "application/octet-stream"
+        key = f"images/{xxhash.xxh64(url.encode()).hexdigest()}{_S3_CT_EXT.get(ct, '')}"
+        s3store.put_object_stream(key, resp.iter_content(chunk_size=65536), ct)
+    finally:
+        resp.close()
+    _s3_remember(url, key, _time.monotonic())
+    return key
+
+
+def s3_presign_source(url, headers=None):
+    return s3store.presigned_get_url(s3_stream_store(url, headers), expires=900)
+
+
+def s3_store_bytes(data, content_type="image/jpeg"):
+    key = f"images/gen-{xxhash.xxh64(data).hexdigest()}{_S3_CT_EXT.get(content_type, '')}"
+    if _s3_cached_key(key):
+        return key
+    s3store.put_object_stream(
+        key, io.BytesIO(data), content_type, content_length=len(data)
+    )
+    _s3_remember(key, key, _time.monotonic())
+    return key
+
+
+def s3_source_url(source, headers=None, eager=False):
+    if not (isinstance(source, str) and source.startswith(("http://", "https://"))):
+        return None
+    if not s3store.enabled():
+        return None
+    app_url = environ.get("APP_URL")
+    if not app_url:
+        return None
+    if eager:
+        _S3_EXECUTOR.submit(s3_stream_store, source, headers)
+    base = app_url.rstrip('/')
+    encoded = urllib.parse.quote(source, safe='')
+    hdr = '/' + urllib.parse.quote(json.dumps(headers), safe='') if headers else ''
+    return f"{base}/s3img/u/{proxy_sign(encoded)}/{encoded}{hdr}"
+
+
+def s3_key_url(key):
+    app_url = environ.get("APP_URL")
+    if not app_url:
+        return None
+    base = app_url.rstrip('/')
+    encoded = urllib.parse.quote(key, safe='')
+    return f"{base}/s3img/k/{proxy_sign(encoded)}/{encoded}"
+
+
 def construct_image(obj):
     if isinstance(obj, str):
         if obj.startswith("data:image/"):
@@ -331,7 +427,8 @@ def construct_image(obj):
             # Create a PIL Image from the decoded data
             image = Image.open(io.BytesIO(image_data))
             return image
-        return InternalPhoto(proxy_image_url(obj))
+        # A bare @image is its own thumbnail in the inline list, so eager-load it.
+        return InternalPhoto(s3_source_url(obj, eager=True) or proxy_image_url(obj))
     if isinstance(obj, dict):
         if 'text' in obj:
             return render_text_card(obj['text'], obj.get('bg', '#000000'), obj.get('fg', '#ffffff'))
@@ -341,9 +438,15 @@ def construct_image(obj):
             headers = kwargs['headers']
             del kwargs['headers']
         if 'url' in kwargs:
-            kwargs['url'] = proxy_image_url(kwargs['url'], headers)
+            kwargs['url'] = (
+                s3_source_url(kwargs['url'], headers, eager=False)
+                or proxy_image_url(kwargs['url'], headers)
+            )
         if kwargs.get('thumb_url'):
-            kwargs['thumb_url'] = kwargs['thumb_url']
+            kwargs['thumb_url'] = (
+                s3_source_url(kwargs['thumb_url'], headers, eager=True)
+                or proxy_image_url(kwargs['thumb_url'], headers)
+            )
         return InternalPhoto(**kwargs)
     raise Exception("Invalid kind for @image " + str(type(obj)))
 
@@ -553,9 +656,6 @@ class APIHandler(object):
             r"(?!\\)\#page\[(\w+)\]\((.*)\)"
         )  # #page[var](...#var...)
         self.page_var_re = lambda var: re.compile(rf"(?!\\)\#{var}\b")  # #var
-        self.cached_images: dict[str, tuple[bytes, bytes]] = {}
-        self.cached_images_size = 0
-        self.CACHED_IMAGES_BUDGET = 4 * 1024 * 1024
 
     def flush(self):
         self.bot.db.db.external_apis.update_one(
@@ -656,41 +756,29 @@ class APIHandler(object):
                 buf = io.BytesIO()
                 x.save(buf, format="JPEG")
                 full_bytes = buf.getvalue()
-                hash = xxhash.xxh64(full_bytes).digest().hex()
-
-                thumb = x.copy()
-                thumb.thumbnail((128, 128))
-                tbuf = io.BytesIO()
-                thumb.save(tbuf, format="JPEG")
-                thumb_bytes = tbuf.getvalue()
-                thumb.close()
-
                 width, height = x.width, x.height
                 x.close()
+                buf = None
 
-                entry_size = len(full_bytes) + len(thumb_bytes)
-                evicted = False
-                while (
-                    self.cached_images_size + entry_size > self.CACHED_IMAGES_BUDGET
-                    and self.cached_images
-                ):
-                    old_k, (old_f, old_t) = next(iter(self.cached_images.items()))
-                    self.cached_images_size -= len(old_f) + len(old_t)
-                    del self.cached_images[old_k]
-                    evicted = True
-
-                self.cached_images[hash] = (full_bytes, thumb_bytes)
-                self.cached_images_size += entry_size
-                if evicted:
-                    release_memory()
-
-                url = f"{environ.get('APP_URL')}/image/{hash}"
-                thumb_url = f"{environ.get('APP_URL')}/thumb/{hash}"
+                try:
+                    photo_url = s3_key_url(s3_store_bytes(full_bytes, "image/jpeg"))
+                except Exception as e:
+                    print("s3 store rendered image failed:", e)
+                    photo_url = None
+                full_bytes = None
+                release_memory()
+                if not photo_url:
+                    return InlineQueryResultArticle(
+                        id=str(uuid),
+                        title=f"result {k}",
+                        input_message_content=InputTextMessageContent(str(k)),
+                        reply_markup=reply_markup,
+                    )
                 return InlineQueryResultPhoto(
                     id=str(uuid),
                     title=f"result {k}",
-                    photo_url=url,
-                    thumbnail_url=thumb_url,
+                    photo_url=photo_url,
+                    thumbnail_url=photo_url,
                     photo_height=height,
                     photo_width=width,
                     caption=k,
