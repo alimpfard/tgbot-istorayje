@@ -27,6 +27,19 @@ def strip_tags(html):
     return x.strip()
 
 
+TG_MESSAGE_LIMIT = 4096
+
+
+def fit_message(message, description):
+    if len(message) <= TG_MESSAGE_LIMIT:
+        return message
+    placeholder = "[...]"
+    overflow = len(message) - TG_MESSAGE_LIMIT
+    keep = max(0, len(description) - overflow - len(placeholder))
+    truncated = description[:keep].rstrip() + placeholder
+    return message.replace(description, truncated, 1)
+
+
 url = "https://graphql.anilist.co"
 
 
@@ -71,19 +84,23 @@ def charquery_render(s, extras: dict):
         )
     ]
     for c in characters:
+        desc = strip_tags(c["description"])
         responses.append(
             InlineQueryResultArticle(
                 id=str(uuid4()),
                 title=c["name"]["full"],
                 thumbnail_url=c["image"]["medium"],
                 input_message_content=InputTextMessageContent(
-                    (
-                        f"<b>{c['name']['last']}, {c['name']['first']} ({c['name']['full']})</b>\n"
-                        + f"Native name: {c['name']['native']}\n"
-                        + f"Other names: {', '.join(c['name']['alternative'] or ['No other name'])}\n"
-                        + "\n"
-                        + f"{strip_tags(c['description'])}\n"
-                        + f"<a href=\"{c['image']['large']}\"> Image</a>, <a href=\"{c['siteUrl']}\"> Anilist Page </a>"
+                    fit_message(
+                        (
+                            f"<b>{c['name']['last']}, {c['name']['first']} ({c['name']['full']})</b>\n"
+                            + f"Native name: {c['name']['native']}\n"
+                            + f"Other names: {', '.join(c['name']['alternative'] or ['No other name'])}\n"
+                            + "\n"
+                            + f"{desc}\n"
+                            + f"<a href=\"{c['image']['large']}\"> Image</a>, <a href=\"{c['siteUrl']}\"> Anilist Page </a>"
+                        ),
+                        desc,
                     ),
                     parse_mode="HTML",
                 ),
@@ -174,6 +191,7 @@ def cquery_render(s, extras: dict):
         return f"episode {eps or '???'} in {timefmt(time)}"
 
     for n, m in media:
+        desc = strip_tags(m["description"])
         responses.append(
             InlineQueryResultArticle(
                 id=str(uuid4()),
@@ -182,22 +200,25 @@ def cquery_render(s, extras: dict):
                 )(m["title"]),
                 thumbnail_url=m["coverImage"]["medium"],
                 input_message_content=InputTextMessageContent(
-                    (
-                        f"<b>{m['title']['english'] or m['title']['romaji']} ({m['startDate']['year']})</b>\n"
-                        + f"Original name: {m['title']['native']}\n"
-                        + f"Romaji name: {m['title']['romaji']}\n"
-                        + f"Status: {m['status']}\n"
-                        + f"Genres: {', '.join(m.get('genres', None) or ['Nothing'])}\n"
-                        + f"Tags: {', '.join(i['name'] for i in (m.get('tags', []))) or 'Nothing'}\n"
-                        + f"Total episode count: {m['episodes']}\n"
-                        + (
-                            f"Next episode: {nextEpisode(m['airingSchedule']['nodes'])}\n"
-                            if m["status"] == "RELEASING"
-                            else ""
-                        )
-                        + "\nHere be dragons\n"
-                        + f"Description: {strip_tags(m['description'])}\n"
-                        + f"<a href=\"{m['coverImage']['large']}\"> Cover Image </a>"
+                    fit_message(
+                        (
+                            f"<b>{m['title']['english'] or m['title']['romaji']} ({m['startDate']['year']})</b>\n"
+                            + f"Original name: {m['title']['native']}\n"
+                            + f"Romaji name: {m['title']['romaji']}\n"
+                            + f"Status: {m['status']}\n"
+                            + f"Genres: {', '.join(m.get('genres', None) or ['Nothing'])}\n"
+                            + f"Tags: {', '.join(i['name'] for i in (m.get('tags', []))) or 'Nothing'}\n"
+                            + f"Total episode count: {m['episodes']}\n"
+                            + (
+                                f"Next episode: {nextEpisode(m['airingSchedule']['nodes'])}\n"
+                                if m["status"] == "RELEASING"
+                                else ""
+                            )
+                            + "\nHere be dragons\n"
+                            + f"Description: {desc}\n"
+                            + f"<a href=\"{m['coverImage']['large']}\"> Cover Image </a>"
+                        ),
+                        desc,
                     ),
                     parse_mode="HTML",
                 ),
@@ -239,6 +260,7 @@ def qquery_render(s, extras: dict):
         return f"episode {eps or '???'} in {timefmt(time)}"
 
     for m in media:
+        desc = strip_tags(m["description"])
         responses.append(
             InlineQueryResultArticle(
                 id=str(uuid4()),
@@ -247,22 +269,25 @@ def qquery_render(s, extras: dict):
                 )(m["title"]),
                 thumbnail_url=m["coverImage"]["medium"],
                 input_message_content=InputTextMessageContent(
-                    (
-                        f"<b>{m['title']['english'] or m['title']['romaji']} ({m['startDate']['year']})</b>\n"
-                        + f"Original name: {m['title']['native']}\n"
-                        + f"Romaji name: {m['title']['romaji']}\n"
-                        + f"Status: {m['status']}\n"
-                        + f"Genres: {', '.join(m.get('genres', None) or ['Nothing'])}\n"
-                        + f"Tags: {', '.join(i['name'] for i in (m.get('tags', []))) or 'Nothing'}\n"
-                        + f"Total episode count: {m['episodes']}\n"
-                        + (
-                            f"Next episode: {nextEpisode(m['airingSchedule']['nodes'])}\n"
-                            if m["status"] == "RELEASING"
-                            else ""
-                        )
-                        + "\nHere be dragons\n"
-                        + f"Description: {strip_tags(m['description'])}\n"
-                        + f"<a href=\"{m['coverImage']['large']}\"> Cover Image </a>"
+                    fit_message(
+                        (
+                            f"<b>{m['title']['english'] or m['title']['romaji']} ({m['startDate']['year']})</b>\n"
+                            + f"Original name: {m['title']['native']}\n"
+                            + f"Romaji name: {m['title']['romaji']}\n"
+                            + f"Status: {m['status']}\n"
+                            + f"Genres: {', '.join(m.get('genres', None) or ['Nothing'])}\n"
+                            + f"Tags: {', '.join(i['name'] for i in (m.get('tags', []))) or 'Nothing'}\n"
+                            + f"Total episode count: {m['episodes']}\n"
+                            + (
+                                f"Next episode: {nextEpisode(m['airingSchedule']['nodes'])}\n"
+                                if m["status"] == "RELEASING"
+                                else ""
+                            )
+                            + "\nHere be dragons\n"
+                            + f"Description: {desc}\n"
+                            + f"<a href=\"{m['coverImage']['large']}\"> Cover Image </a>"
+                        ),
+                        desc,
                     ),
                     parse_mode="HTML",
                 ),
@@ -304,6 +329,7 @@ def iquery_render(id, extras: dict):
         return f"episode {eps or '???'} in {timefmt(time)}"
 
     for m in media:
+        desc = strip_tags(m["description"])
         responses.append(
             InlineQueryResultArticle(
                 id=str(uuid4()),
@@ -312,22 +338,25 @@ def iquery_render(id, extras: dict):
                 )(m["title"]),
                 thumbnail_url=m["coverImage"]["medium"],
                 input_message_content=InputTextMessageContent(
-                    (
-                        f"<b>{m['title']['english'] or m['title']['romaji']} ({m['startDate']['year']})</b>\n"
-                        + f"Original name: {m['title']['native']}\n"
-                        + f"Romaji name: {m['title']['romaji']}\n"
-                        + f"Status: {m['status']}\n"
-                        + f"Genres: {', '.join(m.get('genres', None) or ['Nothing'])}\n"
-                        + f"Tags: {', '.join(i['name'] for i in (m.get('tags', []))) or 'Nothing'}\n"
-                        + f"Total episode count: {m['episodes']}\n"
-                        + (
-                            f"Next episode: {nextEpisode(m['airingSchedule']['nodes'])}\n"
-                            if m["status"] == "RELEASING"
-                            else ""
-                        )
-                        + "\nHere be dragons\n"
-                        + f"Description: {strip_tags(m['description'])}\n"
-                        + f"<a href=\"{m['coverImage']['large']}\"> Cover Image </a>"
+                    fit_message(
+                        (
+                            f"<b>{m['title']['english'] or m['title']['romaji']} ({m['startDate']['year']})</b>\n"
+                            + f"Original name: {m['title']['native']}\n"
+                            + f"Romaji name: {m['title']['romaji']}\n"
+                            + f"Status: {m['status']}\n"
+                            + f"Genres: {', '.join(m.get('genres', None) or ['Nothing'])}\n"
+                            + f"Tags: {', '.join(i['name'] for i in (m.get('tags', []))) or 'Nothing'}\n"
+                            + f"Total episode count: {m['episodes']}\n"
+                            + (
+                                f"Next episode: {nextEpisode(m['airingSchedule']['nodes'])}\n"
+                                if m["status"] == "RELEASING"
+                                else ""
+                            )
+                            + "\nHere be dragons\n"
+                            + f"Description: {desc}\n"
+                            + f"<a href=\"{m['coverImage']['large']}\"> Cover Image </a>"
+                        ),
+                        desc,
                     ),
                     parse_mode="HTML",
                 ),
@@ -368,6 +397,7 @@ def squery_render(terms: str, extras: dict):
         return f"episode {eps or '???'} in {timefmt(time)}"
 
     for m in media:
+        desc = strip_tags(m["description"])
         responses.append(
             InlineQueryResultArticle(
                 id=str(uuid4()),
@@ -376,22 +406,25 @@ def squery_render(terms: str, extras: dict):
                 )(m["title"]),
                 thumbnail_url=m["coverImage"]["medium"],
                 input_message_content=InputTextMessageContent(
-                    (
-                        f"<b>{m['title']['english'] or m['title']['romaji']} ({m['startDate']['year']})</b>\n"
-                        + f"Original name: {m['title']['native']}\n"
-                        + f"Romaji name: {m['title']['romaji']}\n"
-                        + f"Status: {m['status']}\n"
-                        + f"Genres: {', '.join(m.get('genres', None) or ['Nothing'])}\n"
-                        + f"Tags: {', '.join(i['name'] for i in (m.get('tags', []))) or 'Nothing'}\n"
-                        + f"Total episode count: {m['episodes']}\n"
-                        + (
-                            f"Next episode: {nextEpisode(m['airingSchedule']['nodes'])}\n"
-                            if m["status"] == "RELEASING"
-                            else ""
-                        )
-                        + "\nHere be dragons\n"
-                        + f"Description: {strip_tags(m['description'])}\n"
-                        + f"<a href=\"{m['coverImage']['large']}\"> Cover Image </a>"
+                    fit_message(
+                        (
+                            f"<b>{m['title']['english'] or m['title']['romaji']} ({m['startDate']['year']})</b>\n"
+                            + f"Original name: {m['title']['native']}\n"
+                            + f"Romaji name: {m['title']['romaji']}\n"
+                            + f"Status: {m['status']}\n"
+                            + f"Genres: {', '.join(m.get('genres', None) or ['Nothing'])}\n"
+                            + f"Tags: {', '.join(i['name'] for i in (m.get('tags', []))) or 'Nothing'}\n"
+                            + f"Total episode count: {m['episodes']}\n"
+                            + (
+                                f"Next episode: {nextEpisode(m['airingSchedule']['nodes'])}\n"
+                                if m["status"] == "RELEASING"
+                                else ""
+                            )
+                            + "\nHere be dragons\n"
+                            + f"Description: {desc}\n"
+                            + f"<a href=\"{m['coverImage']['large']}\"> Cover Image </a>"
+                        ),
+                        desc,
                     ),
                     parse_mode="HTML",
                 ),
