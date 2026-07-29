@@ -22,8 +22,13 @@ from telegram import (
     Sticker,
     InlineQueryResultCachedVoice,
     InlineQueryResultCachedAudio,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    InputMediaAnimation,
+    InputMediaPhoto,
+    InputMediaVideo,
 )
-from telegram.ext import ChosenInlineResultHandler
+from telegram.ext import CallbackQueryHandler, ChosenInlineResultHandler
 import telegram
 from telegram import Bot
 from telegram.constants import ParseMode
@@ -487,6 +492,7 @@ class IstorayjeBot:
             CommandHandler("magics", self.help_magics),
             CommandHandler("share", self.share),
             ChosenInlineResultHandler(self.on_result_chosen),
+            CallbackQueryHandler(self.on_followup_dismissed, pattern="^followup$"),
             InlineQueryHandler(self.handle_query),
             MessageHandler(filters.ALL, self.handle_possible_index_update),
         ]
@@ -499,6 +505,78 @@ class IstorayjeBot:
             text=f"""Hello there General Kenobi - {update.message.from_user.id}@{update.message.chat.id}\nWe are live!""",
         )
 
+    def resolve_query_collection(self, query, user_id, bot_username):
+        implicit_collection = self.resolve_alias(f"implicit${bot_username}", user_id)
+        if not implicit_collection.startswith("implicit$"):
+            query = implicit_collection + " " + query
+        _, coll, _, extra = self.parse_query(query)
+        return self.resolve_alias(coll, user_id), extra
+
+    def index_caption(self, user_id, coll, msg_id):
+        for x in self.db.db.storage.aggregate(
+            [
+                {"$match": {"user_id": user_id}},
+                {"$project": {"index": "$collection." + coll + ".index", "_id": 0}},
+                {"$unwind": "$index"},
+                {"$match": {"index.id": msg_id}},
+                {"$limit": 1},
+            ]
+        ):
+            return x["index"].get("caption", None)
+        return None
+
+    def spoilered_media(self, data, caption):
+        ty = data["type"]
+        if ty in ("gif", "mp4"):
+            return InputMediaAnimation(
+                data["file_id"], caption=caption, has_spoiler=True
+            )
+        if ty == "img":
+            return InputMediaPhoto(data["file_id"], caption=caption, has_spoiler=True)
+        if ty == "video":
+            return InputMediaVideo(data["file_id"], caption=caption, has_spoiler=True)
+        return None
+
+    async def try_spoiler_inline_result(
+        self, result, context: ContextTypes.DEFAULT_TYPE, coll, extra
+    ):
+        if not extra.get("spoiler") or not result.inline_message_id:
+            return
+        msg_id = int(result.result_id)
+        userdata = self.db.db.storage.find_one({"user_id": result.from_user.id})
+        chatid = userdata["collection"][coll]["id"]
+        cmsg = self.db.db.message_cache.find_one(
+            {"$and": [{"chatid": chatid}, {"msg_id": msg_id}]}
+        )
+        caption = extra.get("caption", None)
+        if caption in ["$def", "$default", "$"]:
+            caption = self.index_caption(result.from_user.id, coll, msg_id)
+        media = self.spoilered_media(cmsg, caption) if cmsg else None
+        if media is None:
+            print("> can't spoiler", msg_id, "- not cached, or not spoilerable media")
+            # the placeholder keyboard has nothing left to do, take it back off
+            await context.bot.edit_message_reply_markup(
+                inline_message_id=result.inline_message_id,
+                reply_markup=(cmsg or {}).get("reply_markup", None),
+            )
+            return
+        await context.bot.edit_message_media(
+            media=media,
+            inline_message_id=result.inline_message_id,
+            reply_markup=cmsg.get("reply_markup", None),
+        )
+        print("> spoilered", msg_id)
+
+    async def on_followup_dismissed(
+        self, update: telegram.Update, context: ContextTypes.DEFAULT_TYPE
+    ):
+        query = update.callback_query
+        await query.answer()
+        try:
+            await query.edit_message_reply_markup(reply_markup=None)
+        except Exception as e:
+            print("> couldn't clear a followup placeholder:", e)
+
     async def on_result_chosen(
         self, update: telegram.Update, context: ContextTypes.DEFAULT_TYPE
     ):
@@ -510,7 +588,13 @@ class IstorayjeBot:
         except:
             result_id = int(result_id)
         user = result.from_user.id
-        coll, *_ = self.parse_query(result.query)
+        coll, extra = self.resolve_query_collection(
+            result.query, user, context.bot.username
+        )
+        try:
+            await self.try_spoiler_inline_result(result, context, coll, extra)
+        except Exception:
+            traceback.print_exc()
         print(f"> chosen result {result_id} for user {user} - collection {coll}")
         doc = self.db.db.storage.find_one_and_update(
             {"user_id": user}, {"$inc": {"used_count": 1}}, return_document=True
@@ -1844,6 +1928,18 @@ class IstorayjeBot:
 
     reg = re.compile(r"\s+")
 
+    spoiler_flags = ("!spoiler", "!spoil", "!sp")
+
+    # media the Bot API can actually put a spoiler on (documents and stickers can't)
+    spoilerable_types = ("gif", "mp4", "img", "video")
+
+    followup_button = InlineKeyboardButton("···", callback_data="followup")
+
+    def markup_with_followup(self, markup=None):
+        if markup and markup.inline_keyboard:
+            return markup
+        return InlineKeyboardMarkup([[self.followup_button]])
+
     def parse_query(self, gquery):
         original_query = gquery
         gquery = gquery.strip() + " "
@@ -1854,7 +1950,18 @@ class IstorayjeBot:
         query = []
         qstack = []
         qbuf = ""
-        extra: dict = {"caption": None}
+        extra: dict = {"caption": None, "spoiler": False}
+
+        literal = [False]  # the current token had an escape in it, so \!spoiler is a tag
+
+        def push(tok):
+            # query-level flags, they're not tags so they never reach the search
+            if not literal[0] and tok.lower() in self.spoiler_flags:
+                extra["spoiler"] = True
+            else:
+                query.append(tok)
+            literal[0] = False
+
         if gquery.startswith("+"):
             # +n (pagination)
             gquery = gquery[1:]
@@ -1877,19 +1984,21 @@ class IstorayjeBot:
                 qbuf += " "
             elif c == " ":
                 if qbuf:
-                    query.append(qbuf)
+                    push(qbuf)
                     qbuf = ""
             elif c == "{" and not escaped and open_brak == 0:
                 open_brak += 1
             elif c == "\\" and not escaped:
                 escaped = True
+                literal[0] = True
             elif c == "}" and not escaped and open_brak == 1:
                 open_brak = 0
                 extra["caption"] = qbuf
                 qbuf = ""
+                literal[0] = False
             elif c == "|" and not escaped and open_brak == 0:
                 if qbuf != "":
-                    query.append(qbuf)
+                    push(qbuf)
                     qbuf = ""
                 qstack.append(query)
                 query = []
@@ -1927,19 +2036,30 @@ class IstorayjeBot:
     def clone_messaage_with_data(self, data, tags):
         ty = data["type"]
         print("> got some", ty, ":", data)
+        kw = {"reply_markup": data.get("reply_markup", None)}
+        if data.get("has_spoiler") and ty in self.spoilerable_types:
+            kw["api_kwargs"] = {"has_spoiler": True}
+            kw["reply_markup"] = self.markup_with_followup(kw["reply_markup"])
         if ty == "text":
             return InlineQueryResultArticle(
                 id=data["msg_id"],
                 title="> " + ", ".join(tags) + " (" + str(data["msg_id"]) + ")",
                 input_message_content=InputTextMessageContent(data["text"]),
+                **kw,
             )
         elif ty == "mp4":
             return InlineQueryResultCachedMpeg4Gif(
-                data["msg_id"], data["file_id"], caption=data.get("caption", None)
+                data["msg_id"],
+                data["file_id"],
+                caption=data.get("caption", None),
+                **kw,
             )
         elif ty == "gif":
             return InlineQueryResultCachedGif(
-                data["msg_id"], data["file_id"], caption=data.get("caption", None)
+                data["msg_id"],
+                data["file_id"],
+                caption=data.get("caption", None),
+                **kw,
             )
         elif ty == "img":
             return InlineQueryResultCachedPhoto(
@@ -1947,15 +2067,19 @@ class IstorayjeBot:
                 data["file_id"],
                 title="> " + ", ".join(tags) + " (" + str(data["msg_id"]) + ")",
                 caption=data.get("caption", None),
+                **kw,
             )
         elif ty == "sticker":
-            return InlineQueryResultCachedSticker(data["msg_id"], data["file_id"])
+            return InlineQueryResultCachedSticker(
+                data["msg_id"], data["file_id"], **kw
+            )
         elif ty == "doc":
             return InlineQueryResultCachedDocument(
                 data["msg_id"],
                 "> " + ", ".join(tags) + " (" + str(data["msg_id"]) + ")",
                 data["file_id"],
                 caption=data.get("caption", None),
+                **kw,
             )
         elif ty == "voice":
             return InlineQueryResultCachedVoice(
@@ -1963,6 +2087,7 @@ class IstorayjeBot:
                 data["file_id"],
                 "> " + ", ".join(tags) + " (" + str(data["msg_id"]) + ")",
                 caption=data.get("caption", None),
+                **kw,
             )
         elif ty == "audio":
             return InlineQueryResultCachedAudio(
@@ -1971,6 +2096,7 @@ class IstorayjeBot:
                 "> " + ", ".join(tags) + " (" + str(data["msg_id"]) + ")",
                 # FIXME: caption...?
                 # caption=data.get("caption", None),
+                **kw,
             )
         else:
             print("unhandled msg type", ty, "for message", data)
@@ -1985,6 +2111,7 @@ class IstorayjeBot:
         fcaption,
         id=None,
         chid=None,
+        spoiler=False,
     ):
         try:
             text = message.text
@@ -1993,7 +2120,7 @@ class IstorayjeBot:
             data = {"type": "text", "text": text, "chatid": chid, "msg_id": id}
             self.db.db.message_cache.find_one_and_replace(
                 {"$and": [{"msg_id": id}, {"chatid": chid}]},
-                {k: v for k, v in data.items() if k != "caption"},
+                {k: v for k, v in data.items() if k not in ("caption", "has_spoiler")},
                 upsert=True,
             )
             return self.clone_messaage_with_data(data, tags)
@@ -2026,6 +2153,7 @@ class IstorayjeBot:
                         ).download_as_bytearray()
                     ).digest(),
                     "caption": caption,
+                    "has_spoiler": spoiler,
                 }
                 if "mp4" in mime:
                     data["type"] = "mp4"
@@ -2039,7 +2167,7 @@ class IstorayjeBot:
                     data["type"] = "doc"
                 self.db.db.message_cache.find_one_and_replace(
                     {"$and": [{"msg_id": id}, {"chatid": chid}]},
-                    {k: v for k, v in data.items() if k != "caption"},
+                    {k: v for k, v in data.items() if k not in ("caption", "has_spoiler")},
                     upsert=True,
                 )
                 return self.clone_messaage_with_data(data, tags)
@@ -2061,7 +2189,7 @@ class IstorayjeBot:
                                 {"chatid": data["chatid"]},
                             ]
                         },
-                        {k: v for k, v in data.items() if k != "caption"},
+                        {k: v for k, v in data.items() if k not in ("caption", "has_spoiler")},
                         upsert=True,
                     )
                     return self.clone_messaage_with_data(data, tags)
@@ -2083,7 +2211,7 @@ class IstorayjeBot:
                         }
                         self.db.db.message_cache.find_one_and_replace(
                             {"$and": [{"msg_id": id}, {"chatid": chid}]},
-                            {k: v for k, v in data.items() if k != "caption"},
+                            {k: v for k, v in data.items() if k not in ("caption", "has_spoiler")},
                             upsert=True,
                         )
                         return self.clone_messaage_with_data(data, tags)
@@ -2239,6 +2367,7 @@ class IstorayjeBot:
 
     async def send_inline_result_as_reply(self, context, result, chat_id, reply_to_message_id):
         """Send an inline query result as a message reply. Returns True if sent."""
+        has_spoiler = bool((result.api_kwargs or {}).get("has_spoiler", False))
         try:
             if isinstance(result, InlineQueryResultArticle):
                 if result.title.startswith(">> ") or "no result" in result.title or "Exception" in result.title or "no temp" in result.title:
@@ -2257,6 +2386,7 @@ class IstorayjeBot:
                     chat_id=chat_id,
                     photo=result.photo_file_id,
                     caption=result.caption,
+                    has_spoiler=has_spoiler,
                     reply_to_message_id=reply_to_message_id,
                 )
                 return True
@@ -2265,6 +2395,7 @@ class IstorayjeBot:
                     chat_id=chat_id,
                     animation=result.gif_file_id,
                     caption=result.caption,
+                    has_spoiler=has_spoiler,
                     reply_to_message_id=reply_to_message_id,
                 )
                 return True
@@ -2273,6 +2404,7 @@ class IstorayjeBot:
                     chat_id=chat_id,
                     animation=result.mpeg4_file_id,
                     caption=result.caption,
+                    has_spoiler=has_spoiler,
                     reply_to_message_id=reply_to_message_id,
                 )
                 return True
@@ -2378,6 +2510,7 @@ class IstorayjeBot:
                     user,
                 )
             fcaption = extra.get("caption", None)
+            fspoiler = extra.get("spoiler", False)
             print(read(update), "->", repr(coll), repr(query), extra)
             if not coll or coll == "":
                 return
@@ -2466,6 +2599,7 @@ class IstorayjeBot:
                     if not cmsg:
                         print("> id", msgid, "not found...?")
                     cmsg["caption"] = fcaption
+                    cmsg["has_spoiler"] = fspoiler
                     copy = self.clone_messaage_with_data(cmsg, ["last", "used"])
                     if copy:
                         results.append(copy)
@@ -2513,6 +2647,7 @@ class IstorayjeBot:
                             if fcaption not in ["$def", "$default", "$"]
                             else col[2]
                         )
+                        cmsg["has_spoiler"] = fspoiler
                         cloned_message = self.clone_messaage_with_data(cmsg, col[1])
                     elif tempid:
                         print(
@@ -2535,6 +2670,7 @@ class IstorayjeBot:
                             chid=chatid,
                             fcaption=fcaption,
                             dcaption=col[2],
+                            spoiler=fspoiler,
                         )
                         print("duplicated message found:", msg)
 
