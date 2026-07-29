@@ -47,6 +47,38 @@ def aniquery(qry: str, vars: dict):
     return requests.post(url, json={"query": qry, "variables": vars}).json()
 
 
+class AniListError(Exception):
+    pass
+
+
+def extract(res, *path):
+    """Dig into res["data"][path...], raising AniListError with the API's
+    message if the response carries no data (e.g. the API being disabled)."""
+    data = res.get("data") if isinstance(res, dict) else None
+    if data is None:
+        errors = (res or {}).get("errors") or []
+        msg = "; ".join(
+            e.get("message", "unknown error") for e in errors
+        ) or "AniList returned no data"
+        raise AniListError(msg)
+    node = data
+    for key in path:
+        node = node[key]
+    return node
+
+
+def error_response(terms, msg):
+    return [
+        InlineQueryResultArticle(
+            id=str(uuid4()),
+            title=f"AniList request failed for '{terms}'",
+            input_message_content=InputTextMessageContent(
+                f"AniList is unhappy: {msg}"
+            ),
+        )
+    ]
+
+
 def charquery_render(s, extras: dict):
     terms = s
     mquery = """
@@ -75,7 +107,10 @@ def charquery_render(s, extras: dict):
     )
     res = simple_query(litquery=mquery)
     print("got result", res)
-    characters = res["data"]["Page"]["characters"]
+    try:
+        characters = extract(res, "Page", "characters")
+    except AniListError as e:
+        return error_response(terms, str(e))
     responses = [
         InlineQueryResultArticle(
             id=str(uuid4()),
@@ -157,7 +192,10 @@ def cquery_render(s, extras: dict):
     print("query is", mquery)
     media = simple_query(litquery=mquery)
     print("Got result", media)
-    characters = media["data"]["Page"]["characters"]
+    try:
+        characters = extract(media, "Page", "characters")
+    except AniListError as e:
+        return error_response(terms, str(e))
     media = [
         (textwrap.shorten(x["name"]["full"], width=15, placeholder="..."), y)
         for x in characters
@@ -231,7 +269,10 @@ def qquery_render(s, extras: dict):
     terms = id
     media = simple_query(_query=s, page=extras.get("page", 1))
     print("Got result", media)
-    media = [media["data"]["Media"]]
+    try:
+        media = [extract(media, "Media")]
+    except AniListError as e:
+        return error_response(s, str(e))
     responses = [
         InlineQueryResultArticle(
             id=str(uuid4()),
@@ -300,7 +341,10 @@ def iquery_render(id, extras: dict):
     terms = id
     media = simple_query(_query=f"id:{id}", page=extras.get("page", 1))
     print("Got result", media)
-    media = [media["data"]["Media"]]
+    try:
+        media = [extract(media, "Media")]
+    except AniListError as e:
+        return error_response(id, str(e))
     responses = [
         InlineQueryResultArticle(
             id=str(uuid4()),
@@ -368,7 +412,10 @@ def iquery_render(id, extras: dict):
 def squery_render(terms: str, extras: dict):
     media = simple_query(terms, page=extras.get("page", 1))
     print("Got result", media)
-    media = media["data"]["Page"]["media"]
+    try:
+        media = extract(media, "Page", "media")
+    except AniListError as e:
+        return error_response(terms, str(e))
     responses = [
         InlineQueryResultArticle(
             id=str(uuid4()),
