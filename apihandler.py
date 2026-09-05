@@ -190,6 +190,7 @@ def subv(xbody, iotype, name):
                 targets = [targets]
             targets = [checked_as(t, ast.Name).id for t in targets]
 
+            # a, b = (y0, y1) in z -> (lambda a, b: z)(*(y0, y1))
             rast.func = ast.Lambda(
                 ast.arguments(
                     posonlyargs=[],
@@ -200,11 +201,13 @@ def subv(xbody, iotype, name):
                     kwarg=None,
                     defaults=[],
                 ),
-                (lambda x: x if len(targets) == 1 else ast.Starred(x))(
-                    xast.value.comparators[0]
-                ),
+                xast.value.comparators[0],
             )
-            rast.args = [xast.value.left]
+            rast.args = [
+                xast.value.left
+                if len(targets) == 1
+                else ast.Starred(xast.value.left, ast.Load())
+            ]
             xast = rast
     return xast
 
