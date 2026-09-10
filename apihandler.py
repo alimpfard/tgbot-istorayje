@@ -632,6 +632,35 @@ class DotDict(dict):
             self[key] = value
 
 
+def _api_headers(api):
+    name = f"{str(api).upper()}_HEADERS"
+    raw = environ.get(name)
+    if not raw:
+        return None
+    try:
+        h = json.loads(raw)
+    except Exception as e:
+        print(f"WARNING: {name} is set but is not valid JSON ({e}); "
+              f"sending no custom headers. value[:120]={raw[:120]!r}")
+        return None
+    if not isinstance(h, dict):
+        print(f"WARNING: {name} must be a JSON object of header->value; "
+              f"got {type(h).__name__}; sending no custom headers.")
+        return None
+    return h
+
+
+def _json_or_raise(res, api):
+    try:
+        return DotDict({"x": res.json()}).x
+    except ValueError as e:
+        ct = res.headers.get("Content-Type")
+        raise Exception(
+            f"API {api!r} returned non-JSON: status={res.status_code}, "
+            f"content-type={ct!r}, url={res.url!r}, body[:200]={res.text[:200]!r}"
+        ) from e
+
+
 class APIHandler(object):
     def __init__(self, bot):
         self.visitor = TypeCastTransformationVisitor()
@@ -887,21 +916,21 @@ class APIHandler(object):
                 path = self.metavarre.sub(q.get("pvalue", ""), path)
                 body = json.dumps(q.get("value", {}))
                 res = requests.post(path, data=body, headers={"Content-Type": "application/json"})
-                return DotDict({"x": res.json()}).x
+                return _json_or_raise(res, api)
 
             if comm_type == "http/json":
                 path = self.metavarre.sub(urllib.parse.quote_plus(q), path)
-                res = requests.get(path)
-                return DotDict({"x": res.json()}).x
+                res = requests.get(path, headers=_api_headers(api))
+                return _json_or_raise(res, api)
 
             if comm_type == "lit.http/json":
                 path = self.metavarre.sub(q, path)
-                res = requests.get(path)
-                return DotDict({"x": res.json()}).x
+                res = requests.get(path, headers=_api_headers(api))
+                return _json_or_raise(res, api)
 
             if comm_type == "html/xpath":
                 path = self.metavarre.sub(urllib.parse.quote_plus(q), path)
-                req = requests.get(path)
+                req = requests.get(path, headers=_api_headers(api))
                 if req.status_code != 200:
                     raise Exception(f"{req.status_code}: {req.reason}")
                 xml = xhtml.fromstring(req.content)
