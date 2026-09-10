@@ -287,6 +287,18 @@ the available comm types are:
     behaviour: sends the metavar as a gql query
     expected input adapter output: T'
 
+- http/bytes
+    metavar in url: Yes
+    response type: bytes (with a .content_type attribute)
+    behaviour: substitutes the metavar, sends a get request, returns the raw body (feed it to @audio)
+    expected input adapter output: string
+
+- json/post/bytes
+    metavar in url: Yes, through input.pvalue
+    response type: bytes (with a .content_type attribute)
+    behaviour: like json/post, but returns the raw response body instead of parsing json
+    expected input adapter output: {pvalue?: string, value?: T}
+
 
 DSL Documentation
 
@@ -294,6 +306,11 @@ A single python expression with the following extensions
 
 - expr @json - jsonifies expr
 - expr @image - if `expr` is a dict of {url, caption?, thumb_url}, yields that as an input media result, otherwise tries to download the url (data URI supported).
+- expr @audio - yields `expr` as a voice message result. `expr` is raw audio bytes (wav/ogg/mp3/flac/m4a), a data:audio/... URI, an http(s) url,
+    or a dict of {url|data, caption?, title?, voice?, headers?}. voice=False sends a regular audio file (mp3) instead of a voice note.
+    wav is converted to ogg/opus in-process; ogg passes through; other formats need the sidecar's ffmpeg.
+- expr @debounce or expr @debounce(secs) - (input adapters only) yields `expr` unchanged, but the API won't be hit until the user
+    stops typing for `secs` seconds (default 0.8). Queries superseded while waiting are dropped without a request.
 - expr @freshVar - yields an identifier that can be used to retrieve `expr` in a later query (no lifetime guarantee)
 - expr @varStore - yields a value associated with `expr` as an identifier; see @freshVar
 - expr @query - if `expr` refers to the input of the adapter, yields the original query string (otherwise nothing)
@@ -307,5 +324,12 @@ A single python expression with the following extensions
 
 Output Adapter Documentation
 
-All output adapters must evaluate to an array of 2-tuples of the form (result name, result text), both of which should be strings.""",
+All output adapters must evaluate to an array of 2-tuples of the form (result name, result), where result name is a string
+and result is a string (text), an @image, or an @audio.
+
+Example: a text-to-speech API taking `[+mood] text` and returning wav bytes:
+    /api declare tts json/post/bytes ttsin ttsout https://tts.example/speak
+    /api define input ttsin q text {"value": ({"text": q[1:].split(" ", 1)[1], "mood": q[1:].split(" ", 1)[0]} if q.startswith("+") and " " in q else {"text": q})} @debounce(1.5)
+    /api define output ttsout wav text [("speech", wav @audio)]
+then `@tts +happy hello there` speaks "hello there" happily.""",
 ]

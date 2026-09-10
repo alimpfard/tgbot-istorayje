@@ -31,6 +31,21 @@ def process_gifops(url: str, ops: dict, format: str):
     return res.content
 
 
+def transcode_audio(data: bytes, format: str = "ogg") -> bytes:
+    """Convert arbitrary audio bytes to ogg/opus (voice) or mp3 via the sidecar's ffmpeg."""
+    res = requests.post(
+        PKE_TAGIFY_URL + "/transcode",
+        params={"format": format},
+        data=data,
+        headers={"Content-Type": "application/octet-stream"},
+        timeout=120,
+    )
+    if not res.ok:
+        print(f"transcode service returned {res.status_code}: {res.content[:200]!r}")
+        return b""
+    return res.content
+
+
 def store_image(bot, file, chat):
     msg = bot.updater.bot.send_document(
         chat_id=chat, document=file, disable_notification=True

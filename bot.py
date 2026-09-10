@@ -2259,6 +2259,21 @@ class IstorayjeBot:
     def has_api(self, user, api):
         return api in self.external_api_handler.apis
 
+    _inline_seq: dict = {}
+    _bg_tasks: set = set()
+
+    @staticmethod
+    def _is_live_inline(update) -> bool:
+        """True for an actual inline query typed by a user (as opposed to the
+        (req, msg) tuples that .ext / scheduled requests go through)."""
+        return isinstance(update, telegram.Update) and update.inline_query is not None
+
+    def _spawn(self, coro):
+        task = asyncio.create_task(coro)
+        self._bg_tasks.add(task)
+        task.add_done_callback(self._bg_tasks.discard)
+        return task
+
     async def external_source_handler(
         self,
         data: dict,
@@ -2339,6 +2354,28 @@ class IstorayjeBot:
                         f"Arguments to source {coll} not understood ({ireqs})"
                     )
             elif self.has_api(user(update).id, coll):
+                debounce = self.external_api_handler.debounce_for(coll)
+                if debounce and not data.get("debounced") and self._is_live_inline(update):
+                    # The input adapter asked for @debounce: wait for the user to
+                    # stop typing, and only hit the API if no newer inline query
+                    # from them showed up in the meantime.  Runs as a task so
+                    # the update fetcher isn't stalled while we wait.
+                    uid = user(update).id
+                    seq = self._inline_seq.get(uid)
+                    args = (context, update, user_data, chat_data, respond, read, user)
+
+                    async def later():
+                        await asyncio.sleep(debounce)
+                        if self._inline_seq.get(uid) != seq:
+                            return  # superseded, let the newer query answer
+                        try:
+                            await self.external_source_handler(data | {"debounced": True}, *args)
+                        except Exception as e:
+                            # most likely the inline query expired while we waited
+                            print(f"debounced {coll} query failed: {e}")
+
+                    self._spawn(later())
+                    return
                 try:
                     # Run on a separate thread to avoid blocking the event loop.
                     def invoke_and_render():
@@ -2460,6 +2497,10 @@ class IstorayjeBot:
 
         try:
             query = read(update)
+            if self._is_live_inline(update):
+                # every keystroke bumps this; @debounce'd APIs compare against it
+                uid = user(update).id
+                self._inline_seq[uid] = self._inline_seq.get(uid, 0) + 1
             if not skip_implicit:
                 implicit_collection = self.resolve_alias(
                     f"implicit${context.bot.username}", user(update).id

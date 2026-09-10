@@ -1,10 +1,12 @@
 FROM python:3.10
 
-RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends libcurl4-openssl-dev && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends libcurl4-openssl-dev libopus0 && rm -rf /var/lib/apt/lists/*
 
 # Cap malloc usage and retention, we don't need a lot of persistent data
 ENV MALLOC_ARENA_MAX=2
 ENV MALLOC_TRIM_THRESHOLD_=131072
+# prints go straight to the fly log instead of sitting in an 8KB buffer
+ENV PYTHONUNBUFFERED=1
 
 RUN mkdir /app
 COPY Pipfile* /app/

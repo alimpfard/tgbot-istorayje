@@ -11,6 +11,8 @@ from telegram import (
     InputTextMessageContent,
     InlineQueryResultPhoto,
     InlineQueryResultGif,
+    InlineQueryResultVoice,
+    InlineQueryResultAudio,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
 )
@@ -27,6 +29,8 @@ from concurrent.futures import ThreadPoolExecutor
 from type import checked_as
 
 import s3store
+import extern
+import audiocodec
 import xxhash
 import base64
 import io
@@ -250,6 +254,144 @@ class InternalPhoto:
         self.thumb_url = thumb_url if thumb_url is not None else url
 
 
+class Blob(bytes):
+    """Raw response bytes from a */bytes comm type, with the Content-Type attached."""
+
+    content_type = "application/octet-stream"
+
+    def __new__(cls, data, content_type=None):
+        self = super().__new__(cls, data)
+        if content_type:
+            self.content_type = content_type.split(";")[0].strip()
+        return self
+
+
+class InternalAudio:
+    def __init__(self, data=None, url=None, content_type=None, caption=None,
+                 title=None, voice=True, headers=None):
+        if data is None and url is None:
+            raise Exception("@audio needs either audio bytes or a url")
+        self.data = data
+        self.url = url
+        self.content_type = content_type
+        self.caption = caption
+        self.title = title
+        self.voice = voice
+        self.headers = headers
+
+
+_AUDIO_MAGIC = (
+    (b"OggS", "audio/ogg"),
+    (b"RIFF", "audio/wav"),
+    (b"ID3", "audio/mpeg"),
+    (b"\xff\xfb", "audio/mpeg"),
+    (b"\xff\xf3", "audio/mpeg"),
+    (b"\xff\xf2", "audio/mpeg"),
+    (b"fLaC", "audio/flac"),
+)
+
+
+def sniff_audio_type(data, hint=None):
+    if hint and hint.startswith("audio/"):
+        return hint
+    for magic, ct in _AUDIO_MAGIC:
+        if data[: len(magic)] == magic:
+            return ct
+    if data[4:8] == b"ftyp":
+        return "audio/mp4"
+    return hint or "application/octet-stream"
+
+
+_AUDIO_MAX_BYTES = 20 * 1024 * 1024
+
+
+def construct_audio(obj):
+    """expr @audio -> InternalAudio.  Accepts raw bytes (wav/ogg/mp3/...),
+    a data:audio/... URI, an http(s) url, or a dict of
+    {url|data, caption?, title?, voice?, headers?}."""
+    if isinstance(obj, (bytes, bytearray, memoryview)):
+        data = bytes(obj)
+        return InternalAudio(data=data, content_type=sniff_audio_type(
+            data, getattr(obj, "content_type", None)))
+    if isinstance(obj, str):
+        if obj.startswith("data:"):
+            header, data = obj.split(",", 1)
+            raw = base64.b64decode(data) if ";base64" in header else urllib.parse.unquote_to_bytes(data)
+            hint = header[5:].split(";")[0] or None
+            return InternalAudio(data=raw, content_type=sniff_audio_type(raw, hint))
+        if obj.startswith(("http://", "https://")):
+            return InternalAudio(url=obj)
+        raise Exception("@audio string must be a data: URI or an http(s) url")
+    if isinstance(obj, dict):
+        kwargs = dict(obj)
+        src = kwargs.pop("data", None)
+        if src is None:
+            src = kwargs.pop("bytes", None)
+        url = kwargs.pop("url", None)
+        if src is None and url is None:
+            raise Exception("@audio dict needs a 'url' or 'data' key")
+        base = construct_audio(src if src is not None else url)
+        base.caption = kwargs.get("caption", base.caption)
+        base.title = kwargs.get("title", base.title)
+        base.voice = bool(kwargs.get("voice", True))
+        base.headers = kwargs.get("headers", base.headers)
+        return base
+    raise Exception("Invalid kind for @audio " + str(type(obj)))
+
+
+def _fetch_audio(url, headers=None):
+    req_headers = {"User-Agent": PROXY_BROWSER_UA}
+    if headers:
+        req_headers.update(headers)
+    resp = requests.get(url, headers=req_headers, stream=True, timeout=30, allow_redirects=True)
+    try:
+        resp.raise_for_status()
+        buf = io.BytesIO()
+        for chunk in resp.iter_content(chunk_size=65536):
+            buf.write(chunk)
+            if buf.tell() > _AUDIO_MAX_BYTES:
+                raise Exception("audio too large (>20MB)")
+        data = buf.getvalue()
+        return data, sniff_audio_type(data, (resp.headers.get("Content-Type") or "").split(";")[0].strip())
+    finally:
+        resp.close()
+
+
+def telegram_audio_url(audio: InternalAudio):
+    """Resolve an InternalAudio to (public url, content type) telegram can consume.
+    Voice notes must be ogg/opus, audio must be mp3/m4a; anything else goes
+    through the sidecar's ffmpeg."""
+    if audio.data is not None:
+        data, ct = audio.data, audio.content_type or sniff_audio_type(audio.data)
+    else:
+        data, ct = _fetch_audio(audio.url, audio.headers)
+
+    if audio.voice:
+        want = ("audio/ogg",)
+        fmt = "ogg"
+    else:
+        want = ("audio/mpeg", "audio/mp4")
+        fmt = "mp3"
+    if ct not in want:
+        if fmt == "ogg" and ct in ("audio/wav", "audio/x-wav", "audio/wave") and audiocodec.available():
+            # wav -> ogg/opus in-process (libopus via ctypes, hand-rolled ogg)
+            data = audiocodec.wav_to_ogg_opus(data, voice=True)
+        else:
+            # anything else (mp3/flac/m4a inputs, or mp3 output) needs ffmpeg,
+            # which only the sidecar has
+            data = extern.transcode_audio(data, fmt)
+            if not data:
+                raise Exception(f"could not transcode {ct} to {fmt}")
+        ct = "audio/ogg" if fmt == "ogg" else "audio/mpeg"
+
+    if not s3store.enabled():
+        raise Exception("audio results need S3 to be configured")
+    url = s3_key_url(s3_store_bytes(data, ct))
+    if not url:
+        raise Exception("audio results need APP_URL to be set")
+    return url, ct
+
+
 def render_text_card(text, bg, fg, size=512, padding=32):
     text = str(text) if text is not None else ''
     image = Image.new('RGB', (size, size), bg)
@@ -333,6 +475,10 @@ _S3_CT_EXT = {
     "image/png": ".png",
     "image/gif": ".gif",
     "image/webp": ".webp",
+    "audio/ogg": ".ogg",
+    "audio/mpeg": ".mp3",
+    "audio/mp4": ".m4a",
+    "audio/wav": ".wav",
 }
 
 
@@ -493,19 +639,20 @@ def strip_tags(html):
     return x.strip()
 
 
+DEFAULT_DEBOUNCE_SECONDS = 0.8
+
+
 class TypeCastTransformationVisitor(ast.NodeTransformer):
     def __init__(self):
-        self.uses = {
-            "json": False,
-            "query": False,
-            "varstore": False,
-        }
+        self.start()
 
     def start(self):
         self.uses = {
             "json": False,
             "query": False,
             "varstore": False,
+            "audio": False,
+            "debounce": None,
         }
         return self
 
@@ -534,6 +681,20 @@ class TypeCastTransformationVisitor(ast.NodeTransformer):
                         ),
                         node,
                     )
+                elif node.right.id.lower() == "audio":
+                    self.uses["audio"] = True
+                    return ast.copy_location(
+                        ast.Call(
+                            func=ast.Name("global_construct_audio"),
+                            args=[node.left],
+                            keywords=[],
+                        ),
+                        node,
+                    )
+                elif node.right.id.lower() == "debounce":
+                    # x @debounce -> x, but the adapter is marked as debounced
+                    self.uses["debounce"] = DEFAULT_DEBOUNCE_SECONDS
+                    return node.left
                 elif node.right.id.lower() == "varstore":
                     # uuid @ varStore -> value
                     self.uses["varstore"] = True
@@ -595,6 +756,20 @@ class TypeCastTransformationVisitor(ast.NodeTransformer):
             ):
                 self.generic_visit(node)
                 # x @ f(...) -> transform
+                if node.right.func.id.lower() == "debounce":
+                    # x @debounce(secs) -> x, adapter marked as debounced by `secs`
+                    if len(node.right.args) != 1 or node.right.keywords:
+                        raise Exception(
+                            f"debounce expects exactly one argument, got {len(node.right.args)}"
+                        )
+                    secs = node.right.args[0]
+                    if not isinstance(secs, ast.Constant) or isinstance(secs.value, bool) \
+                            or not isinstance(secs.value, (int, float)):
+                        raise Exception("debounce argument must be a numeric literal (seconds)")
+                    if not 0 < secs.value <= 30:
+                        raise Exception("debounce must be in (0, 30] seconds")
+                    self.uses["debounce"] = float(secs.value)
+                    return node.left
                 if node.right.func.id.lower() == "nextstep":
                     # x#nextStep(query) -> set_next_step(x, query)
                     if len(node.right.args) != 1:
@@ -636,6 +811,7 @@ def _api_headers(api):
     name = f"{str(api).upper()}_HEADERS"
     raw = environ.get(name)
     if not raw:
+        print(f"api {api!r}: no {name} in env, sending no custom headers")
         return None
     try:
         h = json.loads(raw)
@@ -648,6 +824,17 @@ def _api_headers(api):
               f"got {type(h).__name__}; sending no custom headers.")
         return None
     return h
+
+
+def _bytes_or_raise(res, api, sent_headers):
+    if not res.ok:
+        ct = res.headers.get("Content-Type")
+        raise Exception(
+            f"API {api!r} returned {res.status_code} {res.reason}: url={res.url!r}, "
+            f"sent headers={sorted(sent_headers or {})}, "
+            f"content-type={ct!r}, body[:200]={res.text[:200]!r}"
+        )
+    return Blob(res.content, res.headers.get("Content-Type"))
 
 
 def _json_or_raise(res, api):
@@ -681,6 +868,8 @@ class APIHandler(object):
             "http/link",
             "http/json",
             "lit.http/json",
+            "http/bytes",
+            "json/post/bytes",
             "identity",
         )
         self.metavarre = re.compile(r"(?!\\)\$([\w:]+)")
@@ -784,6 +973,38 @@ class APIHandler(object):
                     caption=x.caption,
                     reply_markup=reply_markup,
                 )
+            if isinstance(x, InternalAudio):
+                title = x.title or f"result {k}"
+                try:
+                    url, _ct = telegram_audio_url(x)
+                except Exception as e:
+                    print("audio result failed:", e)
+                    return InlineQueryResultArticle(
+                        id=str(uuid),
+                        title=f"{title} - audio unavailable",
+                        input_message_content=InputTextMessageContent(
+                            f"{k}\n(audio unavailable: {e})"
+                        ),
+                        reply_markup=reply_markup,
+                    )
+                finally:
+                    x.data = None
+                    release_memory()
+                if x.voice:
+                    return InlineQueryResultVoice(
+                        id=str(uuid),
+                        title=title,
+                        voice_url=url,
+                        caption=x.caption,
+                        reply_markup=reply_markup,
+                    )
+                return InlineQueryResultAudio(
+                    id=str(uuid),
+                    title=title,
+                    audio_url=url,
+                    caption=x.caption,
+                    reply_markup=reply_markup,
+                )
             if isinstance(x, Image.Image):
                 buf = io.BytesIO()
                 x.save(buf, format="JPEG")
@@ -868,6 +1089,8 @@ class APIHandler(object):
                     env.update({"global_to_json": to_json})
                 if "query" in uses and uses["query"]:
                     env.update({"global_construct_image": construct_image})
+                if "audio" in uses and uses["audio"]:
+                    env.update({"global_construct_audio": construct_audio})
                 if "varstore" in uses and uses["varstore"]:
                     env.update({"global_get_var_store": get_var_store, "global_set_var_store": set_var_store})
 
@@ -928,6 +1151,20 @@ class APIHandler(object):
                 res = requests.get(path, headers=_api_headers(api))
                 return _json_or_raise(res, api)
 
+            if comm_type == "http/bytes":
+                path = self.metavarre.sub(urllib.parse.quote_plus(q), path)
+                headers = _api_headers(api)
+                res = requests.get(path, headers=headers, timeout=60)
+                return _bytes_or_raise(res, api, headers)
+
+            if comm_type == "json/post/bytes":
+                path = self.metavarre.sub(q.get("pvalue", ""), path)
+                body = json.dumps(q.get("value", {}))
+                headers = {"Content-Type": "application/json"}
+                headers.update(_api_headers(api) or {})
+                res = requests.post(path, data=body, headers=headers, timeout=60)
+                return _bytes_or_raise(res, api, headers)
+
             if comm_type == "html/xpath":
                 path = self.metavarre.sub(urllib.parse.quote_plus(q), path)
                 req = requests.get(path, headers=_api_headers(api))
@@ -948,6 +1185,15 @@ class APIHandler(object):
         except:
             pass
         return r
+
+    def debounce_for(self, api):
+        """Seconds the input adapter of `api` asked to debounce by, or None."""
+        try:
+            _, inp, _, _ = self.apis[api]
+            uses = self.input_adapters[inp][3]
+            return uses.get("debounce") or None
+        except (KeyError, IndexError, AttributeError, ValueError):
+            return None
 
     def render(self, api, value, extra):
         comm_type, inp, out, path = self.apis[api]

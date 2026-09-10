@@ -71,7 +71,7 @@ def _serialize_inline_result(result):
         if v is not None:
             d[attr] = str(v)
     # urls (for non-cached results like InlineQueryResultPhoto)
-    for attr in ("photo_url", "thumbnail_url", "gif_url", "mpeg4_url"):
+    for attr in ("photo_url", "thumbnail_url", "gif_url", "mpeg4_url", "voice_url", "audio_url"):
         v = _getattr_safe(result, attr)
         if v is not None:
             d[attr] = str(v)
@@ -694,6 +694,36 @@ def _run_custom_api_debug(stages, api_name, ireqs, query, extra, user_id):
             stages["7_comm"]["result"] = _safe_serialize(result)
             from apihandler import DotDict
             result = DotDict({"x": result}).x
+
+        elif comm_type == "http/bytes":
+            from apihandler import Blob, _api_headers
+            resolved_path = metavarre.sub(urllib.parse.quote_plus(q), resolved_path)
+            stages["7_comm"]["resolved_url"] = resolved_path
+            stages["7_comm"]["custom_headers"] = sorted((_api_headers(api_name) or {}).keys())
+            resp = http_requests.get(resolved_path, headers=_api_headers(api_name))
+            stages["7_comm"]["http_status"] = resp.status_code
+            stages["7_comm"]["response_size"] = len(resp.content)
+            stages["7_comm"]["content_type"] = resp.headers.get("Content-Type")
+            resp.raise_for_status()
+            result = Blob(resp.content, resp.headers.get("Content-Type"))
+            stages["7_comm"]["note"] = f"Result is {len(result)} raw bytes ({result.content_type})"
+
+        elif comm_type == "json/post/bytes":
+            from apihandler import Blob, _api_headers
+            resolved_path = metavarre.sub(q.get("pvalue", ""), resolved_path)
+            body = json.dumps(q.get("value", {}))
+            headers = {"Content-Type": "application/json"}
+            headers.update(_api_headers(api_name) or {})
+            stages["7_comm"]["resolved_url"] = resolved_path
+            stages["7_comm"]["post_body"] = json.loads(body)
+            stages["7_comm"]["custom_headers"] = sorted((_api_headers(api_name) or {}).keys())
+            resp = http_requests.post(resolved_path, data=body, headers=headers)
+            stages["7_comm"]["http_status"] = resp.status_code
+            stages["7_comm"]["response_size"] = len(resp.content)
+            stages["7_comm"]["content_type"] = resp.headers.get("Content-Type")
+            resp.raise_for_status()
+            result = Blob(resp.content, resp.headers.get("Content-Type"))
+            stages["7_comm"]["note"] = f"Result is {len(result)} raw bytes ({result.content_type})"
 
         elif comm_type == "html/xpath":
             resolved_path = metavarre.sub(urllib.parse.quote_plus(q), resolved_path)
